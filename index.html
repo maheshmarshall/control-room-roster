@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control Room Roster Generator</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for Inter font and general layout */
+        body {
+            font-family: "Inter", sans-serif;
+            background-color: #f0f4f8; /* Light blue-gray background */
+            color: #334155; /* Dark slate gray text */
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Align to top */
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            background-color: #ffffff; /* White container background */
+            border-radius: 12px; /* Rounded corners */
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); /* Soft shadow */
+            padding: 30px;
+            width: 100%;
+            max-width: 1200px; /* Max width for larger screens */
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        h1 {
+            color: #1e293b; /* Darker title */
+            text-align: center;
+            margin-bottom: 20px;
+            font-weight: 700; /* Bold font */
+        }
+        .input-group label {
+            font-weight: 600; /* Semi-bold label */
+            margin-bottom: 8px;
+            display: block;
+        }
+        .input-group input[type="date"],
+        .input-group textarea {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid #cbd5e1; /* Light gray border */
+            border-radius: 8px; /* Slightly rounded inputs */
+            background-color: #f8fafc; /* Lighter input background */
+            transition: all 0.2s ease-in-out;
+        }
+        .input-group input[type="date"]:focus,
+        .input-group textarea:focus {
+            outline: none;
+            border-color: #6366f1; /* Indigo focus border */
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2); /* Soft focus shadow */
+        }
+        .btn {
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out, transform 0.1s ease-in-out;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background-color: #4f46e5; /* Indigo button */
+            color: white;
+            border: none;
+        }
+        .btn:hover {
+            background-color: #4338ca; /* Darker indigo on hover */
+            transform: translateY(-1px); /* Slight lift effect */
+            box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3);
+        }
+        .btn-secondary {
+            background-color: #6b7280; /* Gray button */
+        }
+        .btn-secondary:hover {
+            background-color: #4b5563; /* Darker gray on hover */
+        }
+        .button-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .roster-output {
+            overflow-x: auto; /* Enable horizontal scrolling for the table */
+            margin-top: 20px;
+            border: 1px solid #e2e8f0; /* Light border around roster */
+            border-radius: 8px;
+        }
+        .roster-table {
+            width: 100%;
+            border-collapse: collapse; /* Collapse table borders */
+            min-width: 800px; /* Ensure minimum width for scrolling */
+        }
+        .roster-table th,
+        .roster-table td {
+            padding: 12px 8px;
+            text-align: center;
+            border: 1px solid #e2e8f0; /* Cell borders */
+            white-space: nowrap; /* Prevent date/shift wrapping */
+        }
+        .roster-table thead th {
+            background-color: #e0e7ff; /* Light indigo header */
+            font-weight: 700;
+            color: #374151;
+            position: sticky; /* Sticky header for scrolling */
+            top: 0;
+            z-index: 10;
+        }
+        .roster-table tbody tr:nth-child(even) {
+            background-color: #f8fafc; /* Zebra striping */
+        }
+        .roster-table tbody tr:hover {
+            background-color: #eff6ff; /* Highlight row on hover */
+        }
+        .roster-table td:first-child {
+            text-align: left; /* Align employee names to left */
+            font-weight: 500;
+            background-color: #e0e7ff; /* Light indigo for employee column */
+            position: sticky; /* Sticky first column */
+            left: 0;
+            z-index: 10;
+        }
+        /* Adjust sticky header background for the first column */
+        .roster-table th:first-child {
+            background-color: #c7d2fe; /* Darker indigo for sticky corner */
+            z-index: 11; /* Ensure it's above other sticky elements */
+        }
+        
+        /* Message box styling */
+        .message-box {
+            background-color: #fff3cd; /* Light yellow background */
+            border: 1px solid #ffeeba; /* Yellow border */
+            color: #664d03; /* Dark yellow text */
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            text-align: center;
+            font-weight: 500;
+            display: none; /* Hidden by default */
+        }
+        .message-box.show {
+            display: block;
+        }
+    </style>
+</head>
+<body class="selection:bg-indigo-300">
+    <div class="container">
+        <h1 class="text-3xl sm:text-4xl">Control Room Roster Generator</h1>
+
+        <div class="input-section grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="input-group">
+                <label for="startDate">Roster Start Date:</label>
+                <input type="date" id="startDate" class="form-input" min="" max="">
+            </div>
+            <div class="input-group">
+                <label for="endDate">Roster End Date:</label>
+                <input type="date" id="endDate" class="form-input" min="" max="">
+            </div>
+            <div class="input-group md:col-span-2"> <!-- Span two columns for the textarea -->
+                <label for="employees">Employee Names (One per line):</label>
+                <textarea id="employees" rows="8" placeholder="Enter employee names here..." class="form-textarea">John Doe
+Jane Smith
+Peter Jones
+Alice Brown
+Michael Green
+Sarah White
+David Black
+Emily Gray
+Chris Red
+Olivia Blue</textarea>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button id="generateRosterBtn" class="btn">Generate Roster</button>
+            <button id="clearRosterBtn" class="btn btn-secondary">Clear Roster</button>
+        </div>
+
+        <div id="messageBox" class="message-box"></div>
+
+        <div id="rosterOutput" class="roster-output hidden">
+            <!-- Roster table will be generated here -->
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const startDateInput = document.getElementById('startDate');
+            const endDateInput = document.getElementById('endDate'); // New: End Date Input
+            const employeesTextarea = document.getElementById('employees');
+            const generateRosterBtn = document.getElementById('generateRosterBtn');
+            const clearRosterBtn = document.getElementById('clearRosterBtn');
+            const rosterOutputDiv = document.getElementById('rosterOutput');
+            const messageBox = document.getElementById('messageBox');
+
+            // Get current year and next year for setting min/max date range
+            const currentYear = new Date().getFullYear();
+            const nextYear = currentYear + 1;
+
+            // Set min and max dates for both input fields
+            const overallMinDate = `${currentYear}-01-01`;
+            const overallMaxDate = `${nextYear}-12-31`;
+            startDateInput.setAttribute('min', overallMinDate);
+            startDateInput.setAttribute('max', overallMaxDate);
+            endDateInput.setAttribute('min', overallMinDate);
+            endDateInput.setAttribute('max', overallMaxDate);
+
+            // Set initial default dates
+            const today = new Date();
+            let defaultStartDate = new Date(today.getFullYear(), today.getMonth(), 16);
+            if (today.getDate() < 16) {
+                defaultStartDate = new Date(today.getFullYear(), today.getMonth() - 1, 16);
+            }
+            startDateInput.value = defaultStartDate.toISOString().split('T')[0];
+
+            // Default end date is 15th of the month after defaultStartDate
+            let defaultEndDate = new Date(defaultStartDate.getFullYear(), defaultStartDate.getMonth() + 1, 15);
+            endDateInput.value = defaultEndDate.toISOString().split('T')[0];
+
+
+            // Event listener to ensure endDate is not before startDate
+            startDateInput.addEventListener('change', () => {
+                if (startDateInput.value && endDateInput.value) {
+                    const start = new Date(startDateInput.value);
+                    const end = new Date(endDateInput.value);
+                    if (start > end) {
+                        // If start date becomes after end date, adjust end date to be start date + 1 month (or similar logical default)
+                        const newEndDate = new Date(start.getFullYear(), start.getMonth() + 1, 15);
+                        endDateInput.value = newEndDate.toISOString().split('T')[0];
+                        showMessage('End date adjusted to be after start date.', 'info');
+                    }
+                } else if (startDateInput.value && !endDateInput.value) {
+                    // If start date is set but end date isn't, propose an end date 1 month later
+                    const start = new Date(startDateInput.value);
+                    const newEndDate = new Date(start.getFullYear(), start.getMonth() + 1, 15);
+                    endDateInput.value = newEndDate.toISOString().split('T')[0];
+                }
+                // Also update the min for endDate to ensure it's not before the current startDate
+                endDateInput.setAttribute('min', startDateInput.value);
+            });
+
+            endDateInput.addEventListener('change', () => {
+                if (startDateInput.value && endDateInput.value) {
+                    const start = new Date(startDateInput.value);
+                    const end = new Date(endDateInput.value);
+                    if (start > end) {
+                        showMessage('End date cannot be before start date. Please correct.', 'error');
+                        endDateInput.value = ''; // Clear invalid end date
+                    }
+                }
+            });
+
+
+            /**
+             * Displays a message in the message box.
+             * @param {string} message - The message to display.
+             * @param {string} type - The type of message (e.g., 'error', 'info', 'success').
+             */
+            function showMessage(message, type = 'info') {
+                messageBox.textContent = message;
+                messageBox.className = 'message-box show'; // Reset classes and show
+                // Remove existing type classes before adding new ones
+                messageBox.classList.remove('bg-red-100', 'border-red-400', 'text-red-700', 'bg-green-100', 'border-green-400', 'text-green-700', 'bg-blue-100', 'border-blue-400', 'text-blue-700');
+                
+                // Add type-specific classes for styling
+                if (type === 'error') {
+                    messageBox.classList.add('bg-red-100', 'border-red-400', 'text-red-700');
+                } else if (type === 'success') {
+                    messageBox.classList.add('bg-green-100', 'border-green-400', 'text-green-700');
+                } else { // Default info
+                    messageBox.classList.add('bg-blue-100', 'border-blue-400', 'text-blue-700');
+                }
+                 // Remove message after 5 seconds
+                setTimeout(() => {
+                    hideMessage();
+                }, 5000);
+            }
+
+            /**
+             * Hides the message box.
+             */
+            function hideMessage() {
+                messageBox.className = 'message-box'; // Hide and remove dynamic classes
+                // Also remove the specific styling classes when hiding
+                messageBox.classList.remove('bg-red-100', 'border-red-400', 'text-red-700', 'bg-green-100', 'border-green-400', 'text-green-700', 'bg-blue-100', 'border-blue-400', 'text-blue-700');
+            }
+
+
+            /**
+             * Determines the shift type (D, N, O) based on the day's index within the 9-day cycle.
+             * @param {number} dayIndexInCycle - The 0-indexed day within the 9-day cycle (0-8).
+             * @returns {string} The shift type ('D', 'N', or 'O').
+             */
+            function getShiftType(dayIndexInCycle) {
+                // The pattern is 3 days, 3 nights, 3 offs
+                const shifts = ["D", "D", "D", "N", "N", "N", "O", "O", "O"];
+                return shifts[dayIndexInCycle % shifts.length]; // Use modulo to ensure cycle repetition
+            }
+
+            /**
+             * Generates the roster based on the input start date and employees.
+             */
+            function generateRoster() {
+                hideMessage(); // Hide any previous messages
+
+                const startDateStr = startDateInput.value;
+                const endDateStr = endDateInput.value; // New: Get End Date
+                const employeesStr = employeesTextarea.value.trim();
+
+                if (!startDateStr || !endDateStr) {
+                    showMessage('Please select both a start and an end date for the roster.', 'error');
+                    return;
+                }
+                if (!employeesStr) {
+                    showMessage('Please enter employee names.', 'error');
+                    return;
+                }
+
+                const employees = employeesStr.split('\n').map(name => name.trim()).filter(name => name !== '');
+
+                const startDate = new Date(startDateStr);
+                startDate.setHours(0, 0, 0, 0); // Normalize to start of day
+                const endDate = new Date(endDateStr);
+                endDate.setHours(0, 0, 0, 0); // Normalize to start of day
+
+                if (startDate > endDate) {
+                    showMessage('The start date cannot be after the end date. Please correct.', 'error');
+                    return;
+                }
+
+                const dates = [];
+                let currentDate = new Date(startDate);
+
+                // Populate all dates within the specified range
+                while (currentDate <= endDate) {
+                    dates.push(new Date(currentDate)); // Push a copy to avoid reference issues
+                    currentDate.setDate(currentDate.getDate() + 1);
+                }
+
+                if (dates.length === 0) {
+                    showMessage('No dates to generate. Please check your start and end dates.', 'error');
+                    return;
+                }
+
+                let tableHTML = `<table class="roster-table"><thead><tr><th class="employee-header">Employee Name</th>`;
+
+                // Add date headers
+                dates.forEach(date => {
+                    // Format as DD/MM (or MM/DD depending on locale, keeping it simple)
+                    tableHTML += `<th>${date.getDate()}/${(date.getMonth() + 1).toString().padStart(2, '0')}</th>`;
+                });
+                tableHTML += `</tr></thead><tbody>`;
+
+                // Add rows for each employee
+                employees.forEach((employeeName, empIndex) => {
+                    tableHTML += `<tr><td class="employee-name">${employeeName}</td>`;
+                    dates.forEach(date => {
+                        // Calculate days since the overall roster start date (startDate) for this specific date
+                        const diffTime = Math.abs(date.getTime() - startDate.getTime());
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // Days elapsed
+                        
+                        // Apply the 9-day pattern
+                        const dayIndexInCycle = diffDays % 9; // 0-indexed day in the 9-day cycle
+
+                        const shift = getShiftType(dayIndexInCycle);
+                        tableHTML += `<td>${shift}</td>`;
+                    });
+                    tableHTML += `</tr>`;
+                });
+
+                tableHTML += `</tbody></table>`;
+                rosterOutputDiv.innerHTML = tableHTML;
+                rosterOutputDiv.classList.remove('hidden'); // Show the output div
+                showMessage('Roster generated successfully!', 'success');
+            }
+
+            /**
+             * Clears the generated roster and input fields.
+             */
+            function clearRoster() {
+                rosterOutputDiv.innerHTML = '';
+                rosterOutputDiv.classList.add('hidden'); // Hide the output div
+                // Reset to default calculated start and end dates
+                startDateInput.value = defaultStartDate.toISOString().split('T')[0];
+                endDateInput.value = defaultEndDate.toISOString().split('T')[0];
+                employeesTextarea.value = `John Doe
+Jane Smith
+Peter Jones
+Alice Brown
+Michael Green
+Sarah White
+David Black
+Emily Gray
+Chris Red
+Olivia Blue`; // Reset to default
+                hideMessage();
+                showMessage('Roster cleared.', 'info');
+            }
+
+            // Event Listeners
+            generateRosterBtn.addEventListener('click', generateRoster);
+            clearRosterBtn.addEventListener('click', clearRoster);
+        });
+    </script>
+</body>
+</html>
