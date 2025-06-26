@@ -85,6 +85,7 @@
             gap: 15px;
             justify-content: center;
             margin-top: 20px;
+            flex-wrap: wrap; /* Allow buttons to wrap on smaller screens */
         }
 
         .roster-output {
@@ -180,6 +181,7 @@ Olivia Blue</textarea>
 
         <div class="button-group">
             <button id="generateRosterBtn" class="btn">Generate Roster</button>
+            <button id="exportCsvBtn" class="btn">Export to CSV</button> <!-- New Export Button -->
             <button id="clearRosterBtn" class="btn btn-secondary">Clear Roster</button>
         </div>
 
@@ -193,9 +195,10 @@ Olivia Blue</textarea>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const startDateInput = document.getElementById('startDate');
-            const endDateInput = document.getElementById('endDate'); // New: End Date Input
+            const endDateInput = document.getElementById('endDate');
             const employeesTextarea = document.getElementById('employees');
             const generateRosterBtn = document.getElementById('generateRosterBtn');
+            const exportCsvBtn = document.getElementById('exportCsvBtn'); // New: Export Button
             const clearRosterBtn = document.getElementById('clearRosterBtn');
             const rosterOutputDiv = document.getElementById('rosterOutput');
             const messageBox = document.getElementById('messageBox');
@@ -311,7 +314,7 @@ Olivia Blue</textarea>
                 hideMessage(); // Hide any previous messages
 
                 const startDateStr = startDateInput.value;
-                const endDateStr = endDateInput.value; // New: Get End Date
+                const endDateStr = endDateInput.value;
                 const employeesStr = employeesTextarea.value.trim();
 
                 if (!startDateStr || !endDateStr) {
@@ -404,8 +407,54 @@ Olivia Blue`; // Reset to default
                 showMessage('Roster cleared.', 'info');
             }
 
+            /**
+             * Exports the generated roster table to a CSV file.
+             */
+            function exportRosterToCSV() {
+                const table = rosterOutputDiv.querySelector('table');
+                if (!table) {
+                    showMessage('No roster generated yet to export!', 'error');
+                    return;
+                }
+
+                let csv = [];
+                const rows = table.querySelectorAll('tr');
+
+                // Iterate over rows to build CSV
+                rows.forEach((row, rowIndex) => {
+                    const cols = row.querySelectorAll('th, td');
+                    const rowData = [];
+                    cols.forEach(col => {
+                        let text = col.innerText.trim();
+                        // Handle commas within cell data by enclosing in double quotes
+                        if (text.includes(',')) {
+                            text = `"${text.replace(/"/g, '""')}"`; // Escape double quotes
+                        }
+                        rowData.push(text);
+                    });
+                    csv.push(rowData.join(','));
+                });
+
+                // Create a Blob with the CSV data
+                const csvString = csv.join('\n');
+                const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+
+                // Create a temporary link element to trigger the download
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.setAttribute('download', 'control_room_roster.csv');
+                link.style.visibility = 'hidden'; // Hide the link
+                document.body.appendChild(link);
+                link.click(); // Programmatically click the link to trigger download
+                document.body.removeChild(link); // Clean up
+                URL.revokeObjectURL(link.href); // Release object URL
+
+                showMessage('Roster exported to CSV!', 'success');
+            }
+
             // Event Listeners
             generateRosterBtn.addEventListener('click', generateRoster);
+            exportCsvBtn.addEventListener('click', exportRosterToCSV); // Attach new export function
             clearRosterBtn.addEventListener('click', clearRoster);
         });
     </script>
