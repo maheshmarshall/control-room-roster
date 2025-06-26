@@ -166,16 +166,7 @@
             </div>
             <div class="input-group md:col-span-2"> <!-- Span two columns for the textarea -->
                 <label for="employees">Employee Names (One per line):</label>
-                <textarea id="employees" rows="8" placeholder="Enter employee names here..." class="form-textarea">John Doe
-Jane Smith
-Peter Jones
-Alice Brown
-Michael Green
-Sarah White
-David Black
-Emily Gray
-Chris Red
-Olivia Blue</textarea>
+                <textarea id="employees" rows="8" placeholder="Enter employee names here..." class="form-textarea"></textarea>
             </div>
         </div>
 
@@ -227,6 +218,8 @@ Olivia Blue</textarea>
             let defaultEndDate = new Date(defaultStartDate.getFullYear(), defaultStartDate.getMonth() + 1, 15);
             endDateInput.value = defaultEndDate.toISOString().split('T')[0];
 
+            // Set employee textarea to be blank by default
+            employeesTextarea.value = ''; // This line is changed to make it blank
 
             // Event listener to ensure endDate is not before startDate
             startDateInput.addEventListener('change', () => {
@@ -393,16 +386,7 @@ Olivia Blue</textarea>
                 // Reset to default calculated start and end dates
                 startDateInput.value = defaultStartDate.toISOString().split('T')[0];
                 endDateInput.value = defaultEndDate.toISOString().split('T')[0];
-                employeesTextarea.value = `John Doe
-Jane Smith
-Peter Jones
-Alice Brown
-Michael Green
-Sarah White
-David Black
-Emily Gray
-Chris Red
-Olivia Blue`; // Reset to default
+                employeesTextarea.value = ''; // This line is changed to make it blank
                 hideMessage();
                 showMessage('Roster cleared.', 'info');
             }
