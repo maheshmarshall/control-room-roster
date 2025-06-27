@@ -160,6 +160,50 @@
             background-color: #fee2e2; /* Lightest red for data cells */
             color: #b91c1c; /* Darker red text */
         }
+
+        /* Roster Summary Styles */
+        .roster-summary {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #f0f9ff; /* Light blue background */
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        .roster-summary h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .summary-table th,
+        .summary-table td {
+            padding: 10px 15px;
+            border: 1px solid #e2e8f0;
+            text-align: left;
+        }
+        .summary-table thead th {
+            background-color: #dbeafe; /* Lighter blue header */
+            font-weight: 600;
+            color: #1e40af;
+        }
+        .summary-table tbody tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+        .summary-table tbody tr:hover {
+            background-color: #e0f2fe;
+        }
+        .summary-table td:last-child,
+        .summary-table td:nth-last-child(2),
+        .summary-table td:nth-last-child(3),
+        .summary-table td:nth-last-child(4) { /* Added for new columns */
+            text-align: center; /* Center the calculation columns */
+            font-weight: 500;
+        }
     </style>
 </head>
 <body class="selection:bg-indigo-300">
@@ -184,6 +228,7 @@
         <div class="button-group">
             <button id="generateRosterBtn" class="btn">Generate Roster</button>
             <button id="exportCsvBtn" class="btn">Export to CSV</button>
+            <button id="generateShiftInsightsBtn" class="btn">Generate Shift Insights ✨</button> <!-- New LLM Button -->
             <button id="clearRosterBtn" class="btn btn-secondary">Clear Roster</button>
         </div>
 
@@ -192,42 +237,43 @@
         <div id="rosterOutput" class="roster-output hidden">
             <!-- Roster table will be generated here -->
         </div>
+
+        <div id="rosterSummary" class="roster-summary hidden">
+            <h2>Roster Summary</h2>
+            <div id="summaryTableContainer">
+                <!-- Summary table will be generated here -->
+            </div>
+        </div>
     </div>
 
     <script>
+        // Global variable to store shift descriptions from LLM
+        let shiftDescriptions = null;
+
         document.addEventListener('DOMContentLoaded', () => {
             const startDateInput = document.getElementById('startDate');
             const endDateInput = document.getElementById('endDate');
             const employeesTextarea = document.getElementById('employees');
             const generateRosterBtn = document.getElementById('generateRosterBtn');
             const exportCsvBtn = document.getElementById('exportCsvBtn');
+            const generateShiftInsightsBtn = document.getElementById('generateShiftInsightsBtn'); // New: LLM Button
             const clearRosterBtn = document.getElementById('clearRosterBtn');
             const rosterOutputDiv = document.getElementById('rosterOutput');
             const messageBox = document.getElementById('messageBox');
+            const rosterSummaryDiv = document.getElementById('rosterSummary');
+            const summaryTableContainer = document.getElementById('summaryTableContainer');
 
-            // Get current year and next year for setting min/max date range
+            // Set min date to 2025-01-01
+            const overallMinDate = `2025-01-01`;
+            // Max date is December 31st of the next year from the current year
             const currentYear = new Date().getFullYear();
             const nextYear = currentYear + 1;
-
-            // Set min and max dates for both input fields
-            const overallMinDate = `${currentYear}-01-01`;
             const overallMaxDate = `${nextYear}-12-31`;
+
             startDateInput.setAttribute('min', overallMinDate);
             startDateInput.setAttribute('max', overallMaxDate);
             endDateInput.setAttribute('min', overallMinDate);
             endDateInput.setAttribute('max', overallMaxDate);
-
-            // Set initial default dates
-            const today = new Date();
-            let defaultStartDate = new Date(today.getFullYear(), today.getMonth(), 16);
-            if (today.getDate() < 16) {
-                defaultStartDate = new Date(today.getFullYear(), today.getMonth() - 1, 16);
-            }
-            startDateInput.value = defaultStartDate.toISOString().split('T')[0];
-
-            // Default end date is 15th of the month after defaultStartDate
-            let defaultEndDate = new Date(defaultStartDate.getFullYear(), defaultStartDate.getMonth() + 1, 15);
-            endDateInput.value = defaultEndDate.toISOString().split('T')[0];
 
             // Set employee textarea to be blank by default
             employeesTextarea.value = '';
@@ -305,6 +351,22 @@
             }
 
             /**
+             * Applies LLM-generated shift descriptions as tooltips to the roster cells.
+             */
+            function applyShiftDescriptions() {
+                if (!shiftDescriptions) {
+                    return; // No descriptions to apply
+                }
+                const shiftCells = rosterOutputDiv.querySelectorAll('.roster-table tbody td');
+                shiftCells.forEach(cell => {
+                    const shiftType = cell.textContent.trim();
+                    if (shiftDescriptions[shiftType]) {
+                        cell.setAttribute('title', shiftDescriptions[shiftType]);
+                    }
+                });
+            }
+
+            /**
              * Generates the roster based on the input start date and employees.
              */
             function generateRoster() {
@@ -372,8 +434,28 @@
                 });
                 tableHTML += `</tr></thead><tbody>`;
 
+                // Store shift counts for summary
+                const employeeShiftCounts = {};
+                let totalSundaysInRosterPeriod = 0; // Initialize total Sundays for the period
+
+                // Calculate total Sundays in the roster period (this is constant for all employees)
+                dates.forEach(date => {
+                    if (date.getDay() === 0) { // 0 is Sunday
+                        totalSundaysInRosterPeriod++;
+                    }
+                });
+
+
                 // Add rows for each employee
                 employees.forEach((employeeName, empIndex) => {
+                    employeeShiftCounts[employeeName] = { 
+                        D: 0, 
+                        N: 0, 
+                        O: 0, 
+                        normalHours: 0,
+                        totalSundays: totalSundaysInRosterPeriod, // Add total Sundays
+                        sundayHoursTimeAndAHalf: totalSundaysInRosterPeriod * 18 // Calculate Sunday hours (12 hours * 1.5)
+                    }; 
                     tableHTML += `<tr><td class="employee-name">${employeeName}</td>`;
                     dates.forEach(date => {
                         const diffTime = Math.abs(date.getTime() - startDate.getTime());
@@ -384,13 +466,32 @@
                         const isSunday = date.getDay() === 0; // 0 is Sunday
                         const cellHighlightClass = isSunday ? ' sunday-column-cell' : ''; // Apply cell highlight for data cells
                         tableHTML += `<td class="${cellHighlightClass}">${shift}</td>`;
+                        
+                        // Increment shift count for the employee
+                        employeeShiftCounts[employeeName][shift]++;
                     });
+                    // Calculate normal hours after all shifts for the employee are counted
+                    employeeShiftCounts[employeeName].normalHours = (employeeShiftCounts[employeeName].D + employeeShiftCounts[employeeName].N + employeeShiftCounts[employeeName].O) * 12;
                     tableHTML += `</tr>`;
                 });
 
                 tableHTML += `</tbody></table>`;
                 rosterOutputDiv.innerHTML = tableHTML;
                 rosterOutputDiv.classList.remove('hidden');
+
+                // Apply descriptions if already generated
+                applyShiftDescriptions();
+
+                // Generate and display summary table
+                let summaryHTML = `<table class="summary-table"><thead><tr><th>Employee Name</th><th>Total Day Shifts (D)</th><th>Total Night Shifts (N)</th><th>Total Off Days (O)</th><th>Normal Hours Total</th><th>Total Sundays</th><th>Sunday Hours Time and a Half</th></tr></thead><tbody>`;
+                for (const employeeName in employeeShiftCounts) {
+                    const counts = employeeShiftCounts[employeeName];
+                    summaryHTML += `<tr><td>${employeeName}</td><td>${counts.D}</td><td>${counts.N}</td><td>${counts.O}</td><td>${counts.normalHours}</td><td>${counts.totalSundays}</td><td>${counts.sundayHoursTimeAndAHalf}</td></tr>`;
+                }
+                summaryHTML += `</tbody></table>`;
+                summaryTableContainer.innerHTML = summaryHTML;
+                rosterSummaryDiv.classList.remove('hidden'); // Show the summary div
+
                 showMessage('Roster generated successfully!', 'success');
             }
 
@@ -400,9 +501,13 @@
             function clearRoster() {
                 rosterOutputDiv.innerHTML = '';
                 rosterOutputDiv.classList.add('hidden');
-                startDateInput.value = defaultStartDate.toISOString().split('T')[0];
-                endDateInput.value = defaultEndDate.toISOString().split('T')[0];
+                rosterSummaryDiv.classList.add('hidden'); // Hide summary div
+                summaryTableContainer.innerHTML = ''; // Clear summary content
+                // Set date inputs to blank
+                startDateInput.value = '';
+                endDateInput.value = '';
                 employeesTextarea.value = '';
+                shiftDescriptions = null; // Clear cached descriptions
                 hideMessage();
                 showMessage('Roster cleared.', 'info');
             }
@@ -465,6 +570,28 @@
                     csv.push(rowData.join(','));
                 }
 
+                // Add summary data to CSV
+                const summaryTable = summaryTableContainer.querySelector('table');
+                if (summaryTable) {
+                    csv.push('\n'); // Add a blank line for separation
+                    csv.push('Roster Summary'); // Add a header for the summary section
+
+                    const summaryRows = summaryTable.querySelectorAll('tr');
+                    summaryRows.forEach(sRow => {
+                        const sCols = sRow.querySelectorAll('th, td');
+                        const sRowData = [];
+                        sCols.forEach(sCol => {
+                            let sText = sCol.innerText.trim();
+                            if (sText.includes(',')) {
+                                sText = `"${sText.replace(/"/g, '""')}"`;
+                            }
+                            sRowData.push(sText);
+                        });
+                        csv.push(sRowData.join(','));
+                    });
+                }
+
+
                 const csvString = csv.join('\n');
                 const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
 
@@ -480,9 +607,81 @@
                 showMessage('Roster exported to CSV!', 'success');
             }
 
+            /**
+             * Calls the Gemini API to get shift descriptions.
+             */
+            async function generateShiftInsights() {
+                showMessage('Generating shift insights... Please wait.', 'info');
+                try {
+                    const prompt = "You are a helpful assistant for a control room. Provide a very concise, single-sentence description for each of the following shift types: 'D' for Day Shift, 'N' for Night Shift, and 'O' for Off Day. Focus on typical duties or status for a control room environment. Format your response as a JSON object with keys 'D', 'N', 'O' and their corresponding descriptions as values. Example: { \"D\": \"Description for Day Shift\", \"N\": \"Description for Night Shift\", \"O\": \"Description for Off Day\" }";
+                    
+                    let chatHistory = [];
+                    chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+                    
+                    const payload = {
+                        contents: chatHistory,
+                        generationConfig: {
+                            responseMimeType: "application/json",
+                            responseSchema: {
+                                type: "OBJECT",
+                                properties: {
+                                    "D": { "type": "STRING" },
+                                    "N": { "type": "STRING" },
+                                    "O": { "type": "STRING" }
+                                },
+                                "propertyOrdering": ["D", "N", "O"]
+                            }
+                        }
+                    };
+
+                    const apiKey = ""; // Canvas will automatically provide this in runtime
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(`API error: ${response.status} - ${errorData.error.message || response.statusText}`);
+                    }
+
+                    const result = await response.json();
+                    
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        const jsonText = result.candidates[0].content.parts[0].text;
+                        try {
+                            shiftDescriptions = JSON.parse(jsonText);
+                            showMessage('Shift insights generated successfully! Hover over shifts to see descriptions.', 'success');
+                            // If roster is already generated, apply descriptions immediately
+                            if (!rosterOutputDiv.classList.contains('hidden')) {
+                                applyShiftDescriptions();
+                            }
+                        } catch (parseError) {
+                            console.error('Failed to parse LLM response:', parseError);
+                            showMessage('Failed to parse shift insights. Unexpected format from AI.', 'error');
+                            shiftDescriptions = null;
+                        }
+                    } else {
+                        showMessage('No shift insights received from AI. Please try again.', 'error');
+                        shiftDescriptions = null;
+                    }
+
+                } catch (error) {
+                    console.error('Error generating shift insights:', error);
+                    showMessage(`Error generating shift insights: ${error.message}`, 'error');
+                    shiftDescriptions = null;
+                }
+            }
+
             // Event Listeners
             generateRosterBtn.addEventListener('click', generateRoster);
             exportCsvBtn.addEventListener('click', exportRosterToCSV);
+            generateShiftInsightsBtn.addEventListener('click', generateShiftInsights); // Attach LLM function
             clearRosterBtn.addEventListener('click', clearRoster);
         });
     </script>
