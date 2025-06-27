@@ -149,6 +149,17 @@
         .message-box.show {
             display: block;
         }
+
+        /* Sunday Highlight Styles */
+        .sunday-column-header {
+            background-color: #fecaca; /* Lighter red for header */
+            color: #dc2626; /* Red text */
+            font-weight: 700;
+        }
+        .sunday-column-cell {
+            background-color: #fee2e2; /* Lightest red for data cells */
+            color: #b91c1c; /* Darker red text */
+        }
     </style>
 </head>
 <body class="selection:bg-indigo-300">
@@ -172,7 +183,7 @@
 
         <div class="button-group">
             <button id="generateRosterBtn" class="btn">Generate Roster</button>
-            <button id="exportCsvBtn" class="btn">Export to CSV</button> <!-- New Export Button -->
+            <button id="exportCsvBtn" class="btn">Export to CSV</button>
             <button id="clearRosterBtn" class="btn btn-secondary">Clear Roster</button>
         </div>
 
@@ -189,7 +200,7 @@
             const endDateInput = document.getElementById('endDate');
             const employeesTextarea = document.getElementById('employees');
             const generateRosterBtn = document.getElementById('generateRosterBtn');
-            const exportCsvBtn = document.getElementById('exportCsvBtn'); // New: Export Button
+            const exportCsvBtn = document.getElementById('exportCsvBtn');
             const clearRosterBtn = document.getElementById('clearRosterBtn');
             const rosterOutputDiv = document.getElementById('rosterOutput');
             const messageBox = document.getElementById('messageBox');
@@ -219,7 +230,7 @@
             endDateInput.value = defaultEndDate.toISOString().split('T')[0];
 
             // Set employee textarea to be blank by default
-            employeesTextarea.value = ''; // This line is changed to make it blank
+            employeesTextarea.value = '';
 
             // Event listener to ensure endDate is not before startDate
             startDateInput.addEventListener('change', () => {
@@ -227,18 +238,15 @@
                     const start = new Date(startDateInput.value);
                     const end = new Date(endDateInput.value);
                     if (start > end) {
-                        // If start date becomes after end date, adjust end date to be start date + 1 month (or similar logical default)
                         const newEndDate = new Date(start.getFullYear(), start.getMonth() + 1, 15);
                         endDateInput.value = newEndDate.toISOString().split('T')[0];
                         showMessage('End date adjusted to be after start date.', 'info');
                     }
                 } else if (startDateInput.value && !endDateInput.value) {
-                    // If start date is set but end date isn't, propose an end date 1 month later
                     const start = new Date(startDateInput.value);
                     const newEndDate = new Date(start.getFullYear(), start.getMonth() + 1, 15);
                     endDateInput.value = newEndDate.toISOString().split('T')[0];
                 }
-                // Also update the min for endDate to ensure it's not before the current startDate
                 endDateInput.setAttribute('min', startDateInput.value);
             });
 
@@ -248,7 +256,7 @@
                     const end = new Date(endDateInput.value);
                     if (start > end) {
                         showMessage('End date cannot be before start date. Please correct.', 'error');
-                        endDateInput.value = ''; // Clear invalid end date
+                        endDateInput.value = '';
                     }
                 }
             });
@@ -261,19 +269,16 @@
              */
             function showMessage(message, type = 'info') {
                 messageBox.textContent = message;
-                messageBox.className = 'message-box show'; // Reset classes and show
-                // Remove existing type classes before adding new ones
+                messageBox.className = 'message-box show';
                 messageBox.classList.remove('bg-red-100', 'border-red-400', 'text-red-700', 'bg-green-100', 'border-green-400', 'text-green-700', 'bg-blue-100', 'border-blue-400', 'text-blue-700');
                 
-                // Add type-specific classes for styling
                 if (type === 'error') {
                     messageBox.classList.add('bg-red-100', 'border-red-400', 'text-red-700');
                 } else if (type === 'success') {
                     messageBox.classList.add('bg-green-100', 'border-green-400', 'text-green-700');
-                } else { // Default info
+                } else {
                     messageBox.classList.add('bg-blue-100', 'border-blue-400', 'text-blue-700');
                 }
-                 // Remove message after 5 seconds
                 setTimeout(() => {
                     hideMessage();
                 }, 5000);
@@ -283,8 +288,7 @@
              * Hides the message box.
              */
             function hideMessage() {
-                messageBox.className = 'message-box'; // Hide and remove dynamic classes
-                // Also remove the specific styling classes when hiding
+                messageBox.className = 'message-box';
                 messageBox.classList.remove('bg-red-100', 'border-red-400', 'text-red-700', 'bg-green-100', 'border-green-400', 'text-green-700', 'bg-blue-100', 'border-blue-400', 'text-blue-700');
             }
 
@@ -297,14 +301,14 @@
             function getShiftType(dayIndexInCycle) {
                 // The pattern is 3 days, 3 nights, 3 offs
                 const shifts = ["D", "D", "D", "N", "N", "N", "O", "O", "O"];
-                return shifts[dayIndexInCycle % shifts.length]; // Use modulo to ensure cycle repetition
+                return shifts[dayIndexInCycle % shifts.length];
             }
 
             /**
              * Generates the roster based on the input start date and employees.
              */
             function generateRoster() {
-                hideMessage(); // Hide any previous messages
+                hideMessage();
 
                 const startDateStr = startDateInput.value;
                 const endDateStr = endDateInput.value;
@@ -322,9 +326,9 @@
                 const employees = employeesStr.split('\n').map(name => name.trim()).filter(name => name !== '');
 
                 const startDate = new Date(startDateStr);
-                startDate.setHours(0, 0, 0, 0); // Normalize to start of day
+                startDate.setHours(0, 0, 0, 0);
                 const endDate = new Date(endDateStr);
-                endDate.setHours(0, 0, 0, 0); // Normalize to start of day
+                endDate.setHours(0, 0, 0, 0);
 
                 if (startDate > endDate) {
                     showMessage('The start date cannot be after the end date. Please correct.', 'error');
@@ -334,9 +338,8 @@
                 const dates = [];
                 let currentDate = new Date(startDate);
 
-                // Populate all dates within the specified range
                 while (currentDate <= endDate) {
-                    dates.push(new Date(currentDate)); // Push a copy to avoid reference issues
+                    dates.push(new Date(currentDate));
                     currentDate.setDate(currentDate.getDate() + 1);
                 }
 
@@ -345,12 +348,27 @@
                     return;
                 }
 
-                let tableHTML = `<table class="roster-table"><thead><tr><th class="employee-header">Employee Name</th>`;
+                // Array for short day names (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+                const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-                // Add date headers
+                let tableHTML = `<table class="roster-table"><thead>`;
+                
+                // First header row for "Employee Name" and Dates
+                tableHTML += `<tr><th class="employee-header" rowspan="2">Employee Name</th>`; // rowspan for employee header
                 dates.forEach(date => {
-                    // Format as DD/MM (or MM/DD depending on locale, keeping it simple)
-                    tableHTML += `<th>${date.getDate()}/${(date.getMonth() + 1).toString().padStart(2, '0')}</th>`;
+                    // Check if the current date is a Sunday
+                    const isSunday = date.getDay() === 0; // 0 is Sunday
+                    const headerHighlightClass = isSunday ? ' sunday-column-header' : '';
+                    tableHTML += `<th class="${headerHighlightClass}">${date.getDate()}/${(date.getMonth() + 1).toString().padStart(2, '0')}</th>`;
+                });
+                tableHTML += `</tr>`;
+
+                // Second header row for Day of the Week
+                tableHTML += `<tr>`;
+                dates.forEach(date => {
+                    const isSunday = date.getDay() === 0; // 0 is Sunday
+                    const highlightClass = isSunday ? ' sunday-column-header' : ''; // Use header highlight for this row too
+                    tableHTML += `<th class="${highlightClass}">${dayNames[date.getDay()]}</th>`;
                 });
                 tableHTML += `</tr></thead><tbody>`;
 
@@ -358,22 +376,21 @@
                 employees.forEach((employeeName, empIndex) => {
                     tableHTML += `<tr><td class="employee-name">${employeeName}</td>`;
                     dates.forEach(date => {
-                        // Calculate days since the overall roster start date (startDate) for this specific date
                         const diffTime = Math.abs(date.getTime() - startDate.getTime());
-                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // Days elapsed
-                        
-                        // Apply the 9-day pattern
-                        const dayIndexInCycle = diffDays % 9; // 0-indexed day in the 9-day cycle
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        const dayIndexInCycle = diffDays % 9;
 
                         const shift = getShiftType(dayIndexInCycle);
-                        tableHTML += `<td>${shift}</td>`;
+                        const isSunday = date.getDay() === 0; // 0 is Sunday
+                        const cellHighlightClass = isSunday ? ' sunday-column-cell' : ''; // Apply cell highlight for data cells
+                        tableHTML += `<td class="${cellHighlightClass}">${shift}</td>`;
                     });
                     tableHTML += `</tr>`;
                 });
 
                 tableHTML += `</tbody></table>`;
                 rosterOutputDiv.innerHTML = tableHTML;
-                rosterOutputDiv.classList.remove('hidden'); // Show the output div
+                rosterOutputDiv.classList.remove('hidden');
                 showMessage('Roster generated successfully!', 'success');
             }
 
@@ -382,11 +399,10 @@
              */
             function clearRoster() {
                 rosterOutputDiv.innerHTML = '';
-                rosterOutputDiv.classList.add('hidden'); // Hide the output div
-                // Reset to default calculated start and end dates
+                rosterOutputDiv.classList.add('hidden');
                 startDateInput.value = defaultStartDate.toISOString().split('T')[0];
                 endDateInput.value = defaultEndDate.toISOString().split('T')[0];
-                employeesTextarea.value = ''; // This line is changed to make it blank
+                employeesTextarea.value = '';
                 hideMessage();
                 showMessage('Roster cleared.', 'info');
             }
@@ -404,41 +420,69 @@
                 let csv = [];
                 const rows = table.querySelectorAll('tr');
 
-                // Iterate over rows to build CSV
-                rows.forEach((row, rowIndex) => {
-                    const cols = row.querySelectorAll('th, td');
+                // Manually construct CSV to include both header rows
+                const headerRow1 = [];
+                const headerRow2 = [];
+
+                // Get headers from the first two rows of the table
+                const headerCells1 = rows[0].querySelectorAll('th');
+                const headerCells2 = rows[1].querySelectorAll('th');
+
+                // First header row (Employee Name and Dates)
+                headerCells1.forEach((cell, index) => {
+                    let text = cell.innerText.trim();
+                    if (index === 0) { // Employee Name cell
+                        headerRow1.push(text);
+                        headerRow2.push(''); // Empty cell for day of week under Employee Name
+                    } else {
+                        if (text.includes(',')) text = `"${text.replace(/"/g, '""')}"`;
+                        headerRow1.push(text);
+                    }
+                });
+                csv.push(headerRow1.join(','));
+
+                // Second header row (Day of the Week)
+                headerCells2.forEach(cell => {
+                    let text = cell.innerText.trim();
+                    if (text.includes(',')) text = `"${text.replace(/"/g, '""')}"`;
+                    headerRow2.push(text);
+                });
+                csv.push(headerRow2.join(','));
+
+
+                // Iterate over data rows (starting from index 2, as 0 and 1 are headers)
+                for (let i = 2; i < rows.length; i++) {
+                    const row = rows[i];
+                    const cols = row.querySelectorAll('td');
                     const rowData = [];
                     cols.forEach(col => {
                         let text = col.innerText.trim();
-                        // Handle commas within cell data by enclosing in double quotes
                         if (text.includes(',')) {
-                            text = `"${text.replace(/"/g, '""')}"`; // Escape double quotes
+                            text = `"${text.replace(/"/g, '""')}"`;
                         }
                         rowData.push(text);
                     });
                     csv.push(rowData.join(','));
-                });
+                }
 
-                // Create a Blob with the CSV data
                 const csvString = csv.join('\n');
                 const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
 
-                // Create a temporary link element to trigger the download
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
                 link.setAttribute('download', 'control_room_roster.csv');
-                link.style.visibility = 'hidden'; // Hide the link
+                link.style.visibility = 'hidden';
                 document.body.appendChild(link);
-                link.click(); // Programmatically click the link to trigger download
-                document.body.removeChild(link); // Clean up
-                URL.revokeObjectURL(link.href); // Release object URL
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(link.href);
 
                 showMessage('Roster exported to CSV!', 'success');
             }
 
             // Event Listeners
             generateRosterBtn.addEventListener('click', generateRoster);
-            exportCsvBtn.addEventListener('click', exportRosterToCSV); // Attach new export function
+            exportCsvBtn.addEventListener('click', exportRosterToCSV);
             clearRosterBtn.addEventListener('click', clearRoster);
         });
     </script>
