@@ -41,7 +41,8 @@
             display: block;
         }
         .input-group input[type="date"],
-        .input-group textarea {
+        .input-group textarea,
+        .input-group select { /* Added select for styling */
             width: 100%;
             padding: 10px 14px;
             border: 1px solid #cbd5e1; /* Light gray border */
@@ -50,7 +51,8 @@
             transition: all 0.2s ease-in-out;
         }
         .input-group input[type="date"]:focus,
-        .input-group textarea:focus {
+        .input-group textarea:focus,
+        .input-group select:focus { /* Added select for styling */
             outline: none;
             border-color: #6366f1; /* Indigo focus border */
             box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2); /* Soft focus shadow */
@@ -204,6 +206,78 @@
             text-align: center; /* Center the calculation columns */
             font-weight: 500;
         }
+
+        /* Leave Type Styling */
+        .leave-cell {
+            font-weight: 600;
+            color: white; /* Default text color for leave */
+        }
+        .leave-annual-leave { /* Corrected class name */
+            background-color: #34d399; /* Green for Annual Leave ( Tailwind green-500) */
+        }
+        .leave-sick-leave { /* Corrected class name */
+            background-color: #facc15; /* Yellow for Sick Leave (Tailwind yellow-400) */
+            color: #334155; /* Dark text for readability on yellow */
+        }
+        .leave-family-responsibility { /* Corrected class name */
+            background-color: #f97316; /* Orange for Family Responsibility (Tailwind orange-500) */
+        }
+        .leave-unpaid-leave { /* Corrected class name */
+            background-color: #ef4444; /* Red for Unpaid Leave (Tailwind red-500) */
+        }
+        .leave-info {
+            background-color: #60a5fa; /* Blue for general info/tooltip */
+        }
+
+        /* Extra Pay Styling */
+        .extra-pay-cell {
+            font-weight: 600;
+            color: white;
+            background-color: #a78bfa; /* Purple for general extra pay (Tailwind purple-400) */
+        }
+        .extra-pay-day-overtime {
+            background-color: #818cf8; /* Light Blue/Indigo for Day OT (Tailwind indigo-400) */
+        }
+        .extra-pay-night-overtime {
+            background-color: #4c1d95; /* Darker Purple for Night OT (Tailwind violet-800) */
+        }
+        .extra-pay-public-holiday-day-shift {
+            background-color: #22c55e; /* Bright Green for PH Day (Tailwind green-500) */
+        }
+        .extra-pay-public-holiday-night-shift {
+            background-color: #16a34a; /* Dark Green for PH Night (Tailwind green-700) */
+        }
+        .extra-pay-one-normal-time-and-one-o-t-2 {
+            background-color: #ec4899; /* Pink for OT2 (Tailwind pink-500) */
+        }
+
+        /* Dynamic row styling */
+        .dynamic-input-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr) auto; /* 3 columns for inputs, 1 for button */
+            gap: 1rem;
+            margin-bottom: 1rem;
+            align-items: end; /* Align items to the bottom */
+        }
+        .dynamic-input-row .input-group {
+            margin-bottom: 0; /* Remove default margin from input-group */
+        }
+        .dynamic-input-row .remove-btn {
+            padding: 10px 12px;
+            background-color: #ef4444; /* Red */
+            color: white;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out;
+            height: 42px; /* Match input height */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .dynamic-input-row .remove-btn:hover {
+            background-color: #dc2626; /* Darker red */
+        }
     </style>
 </head>
 <body class="selection:bg-indigo-300">
@@ -234,6 +308,39 @@
 
         <div id="messageBox" class="message-box"></div>
 
+        <!-- Leave Management Section -->
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-xl font-semibold mb-4">Leave Management</h2>
+            <div id="leaveInputsContainer">
+                <!-- Dynamic leave input rows will be added here -->
+            </div>
+            <div class="flex gap-4 mt-4">
+                <button id="addLeaveEntryBtn" class="btn bg-gray-500 hover:bg-gray-700 text-white">Add Leave Entry</button>
+                <button id="applyAllLeaveBtn" class="btn bg-blue-500 hover:bg-blue-700 text-white">Apply All Leave</button>
+            </div>
+            <div id="leaveCountOutput" class="mt-4 p-3 bg-gray-100 rounded-md hidden">
+                <h3 class="text-lg font-medium mb-2">Leave Counts:</h3>
+                <ul id="leaveCountsList" class="list-disc pl-5"></ul>
+            </div>
+        </div>
+
+        <!-- Extra Pay Management Section -->
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-xl font-semibold mb-4">Extra Pay Management</h2>
+            <div id="extraPayInputsContainer">
+                <!-- Dynamic extra pay input rows will be added here -->
+            </div>
+            <div class="flex gap-4 mt-4">
+                <button id="addExtraPayEntryBtn" class="btn bg-gray-500 hover:bg-gray-700 text-white">Add Extra Pay Entry</button>
+                <button id="applyAllExtraPayBtn" class="btn bg-purple-500 hover:bg-purple-700 text-white">Apply All Extra Pay</button>
+            </div>
+            <div id="extraPayOutput" class="mt-4 p-3 bg-gray-100 rounded-md hidden">
+                <h3 class="text-lg font-medium mb-2">Extra Pay Details:</h3>
+                <ul id="extraPayList" class="list-disc pl-5"></ul>
+            </div>
+        </div>
+
+
         <div id="rosterOutput" class="roster-output hidden">
             <!-- Roster table will be generated here -->
         </div>
@@ -250,6 +357,16 @@
         // Global variable to store shift descriptions from LLM
         let shiftDescriptions = null;
 
+        // Global variables to store leave data
+        // Example: { "Employee Name": { "YYYY-MM-DD": "Leave Type" } }
+        let employeeLeaveData = {};
+        // Example: { "Employee Name": { "annual leave": 5, "sick leave": 2 } }
+        let employeeLeaveCounts = {};
+
+        // Global variable to store extra pay data
+        // Example: { "Employee Name": { "YYYY-MM-DD": "Extra Pay Type" } }
+        let employeeExtraPayData = {};
+
         document.addEventListener('DOMContentLoaded', () => {
             const startDateInput = document.getElementById('startDate');
             const endDateInput = document.getElementById('endDate');
@@ -262,6 +379,21 @@
             const messageBox = document.getElementById('messageBox');
             const rosterSummaryDiv = document.getElementById('rosterSummary');
             const summaryTableContainer = document.getElementById('summaryTableContainer');
+
+            // Leave Management DOM elements
+            const leaveInputsContainer = document.getElementById('leaveInputsContainer');
+            const addLeaveEntryBtn = document.getElementById('addLeaveEntryBtn');
+            const applyAllLeaveBtn = document.getElementById('applyAllLeaveBtn');
+            const leaveCountOutput = document.getElementById('leaveCountOutput');
+            const leaveCountsList = document.getElementById('leaveCountsList');
+
+            // Extra Pay Management DOM elements
+            const extraPayInputsContainer = document.getElementById('extraPayInputsContainer');
+            const addExtraPayEntryBtn = document.getElementById('addExtraPayEntryBtn');
+            const applyAllExtraPayBtn = document.getElementById('applyAllExtraPayBtn');
+            const extraPayOutput = document.getElementById('extraPayOutput');
+            const extraPayList = document.getElementById('extraPayList');
+
 
             // Set min date to 2025-01-01
             const overallMinDate = `2025-01-01`;
@@ -278,50 +410,94 @@
             // Set employee textarea to be blank by default
             employeesTextarea.value = '';
 
+            /**
+             * Helper function to parse a YYYY-MM-DD string into a Date object in local time.
+             * @param {string} dateString - The date string in YYYY-MM-DD format.
+             * @returns {Date} A Date object representing the date in local time.
+             */
+            function parseDateString(dateString) {
+                const [year, month, day] = dateString.split('-').map(Number);
+                // Month is 0-indexed in JavaScript Date constructor
+                return new Date(year, month - 1, day);
+            }
+
+            /**
+             * Helper function to format a Date object into a YYYY-MM-DD string in local time.
+             * @param {Date} date - The Date object to format.
+             * @returns {string} The date string in YYYY-MM-DD format.
+             */
+            function formatDateToYYYYMMDD(date) {
+                const year = date.getFullYear();
+                const month = (date.getMonth() + 1).toString().padStart(2, '0'); // Month is 0-indexed
+                const day = date.getDate().toString().padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+
             // Event listener to ensure endDate is not before startDate
             startDateInput.addEventListener('change', () => {
                 if (startDateInput.value && endDateInput.value) {
-                    const start = new Date(startDateInput.value);
-                    const end = new Date(endDateInput.value);
+                    const start = parseDateString(startDateInput.value);
+                    const end = parseDateString(endDateInput.value);
                     if (start > end) {
+                        // Adjust endDate to be a reasonable date after startDate, e.g., 15th of next month
                         const newEndDate = new Date(start.getFullYear(), start.getMonth() + 1, 15);
-                        endDateInput.value = newEndDate.toISOString().split('T')[0];
+                        endDateInput.value = formatDateToYYYYMMDD(newEndDate);
                         showMessage('End date adjusted to be after start date.', 'info');
                     }
                 } else if (startDateInput.value && !endDateInput.value) {
-                    const start = new Date(startDateInput.value);
+                    const start = parseDateString(startDateInput.value);
                     const newEndDate = new Date(start.getFullYear(), start.getMonth() + 1, 15);
-                    endDateInput.value = newEndDate.toISOString().split('T')[0];
+                    endDateInput.value = formatDateToYYYYMMDD(newEndDate);
                 }
                 endDateInput.setAttribute('min', startDateInput.value);
+                // Update min/max dates for dynamically added rows
+                updateDynamicRowDateConstraints();
             });
 
             endDateInput.addEventListener('change', () => {
                 if (startDateInput.value && endDateInput.value) {
-                    const start = new Date(startDateInput.value);
-                    const end = new Date(endDateInput.value);
+                    const start = parseDateString(startDateInput.value);
+                    const end = parseDateString(endDateInput.value);
                     if (start > end) {
                         showMessage('End date cannot be before start date. Please correct.', 'error');
                         endDateInput.value = '';
                     }
                 }
+                // Update min/max dates for dynamically added rows
+                updateDynamicRowDateConstraints();
             });
+
+            /**
+             * Updates the min/max attributes for date inputs in dynamic rows.
+             */
+            function updateDynamicRowDateConstraints() {
+                const minDate = startDateInput.value;
+                const maxDate = endDateInput.value;
+
+                document.querySelectorAll('.dynamic-input-row input[type="date"]').forEach(input => {
+                    input.setAttribute('min', minDate);
+                    input.setAttribute('max', maxDate);
+                });
+            }
 
 
             /**
              * Displays a message in the message box.
              * @param {string} message - The message to display.
-             * @param {string} type - The type of message (e.g., 'error', 'info', 'success').
+             * @param {string} type - The type of message (e.g., 'error', 'info', 'success', 'warning').
              */
             function showMessage(message, type = 'info') {
                 messageBox.textContent = message;
                 messageBox.className = 'message-box show';
-                messageBox.classList.remove('bg-red-100', 'border-red-400', 'text-red-700', 'bg-green-100', 'border-green-400', 'text-green-700', 'bg-blue-100', 'border-blue-400', 'text-blue-700');
+                // Clear previous type classes
+                messageBox.classList.remove('bg-red-100', 'border-red-400', 'text-red-700', 'bg-green-100', 'border-green-400', 'text-green-700', 'bg-blue-100', 'border-blue-400', 'text-blue-700', 'bg-yellow-100', 'border-yellow-400', 'text-yellow-700');
                 
                 if (type === 'error') {
                     messageBox.classList.add('bg-red-100', 'border-red-400', 'text-red-700');
                 } else if (type === 'success') {
                     messageBox.classList.add('bg-green-100', 'border-green-400', 'text-green-700');
+                } else if (type === 'warning') {
+                    messageBox.classList.add('bg-yellow-100', 'border-yellow-400', 'text-yellow-700');
                 } else {
                     messageBox.classList.add('bg-blue-100', 'border-blue-400', 'text-blue-700');
                 }
@@ -335,7 +511,7 @@
              */
             function hideMessage() {
                 messageBox.className = 'message-box';
-                messageBox.classList.remove('bg-red-100', 'border-red-400', 'text-red-700', 'bg-green-100', 'border-green-400', 'text-green-700', 'bg-blue-100', 'border-blue-400', 'text-blue-700');
+                messageBox.classList.remove('bg-red-100', 'border-red-400', 'text-red-700', 'bg-green-100', 'border-green-400', 'text-green-700', 'bg-blue-100', 'border-blue-400', 'text-blue-700', 'bg-yellow-100', 'border-yellow-400', 'text-yellow-700');
             }
 
 
@@ -359,9 +535,12 @@
                 }
                 const shiftCells = rosterOutputDiv.querySelectorAll('.roster-table tbody td');
                 shiftCells.forEach(cell => {
-                    const shiftType = cell.textContent.trim();
-                    if (shiftDescriptions[shiftType]) {
-                        cell.setAttribute('title', shiftDescriptions[shiftType]);
+                    // Only apply tooltip if it's a shift, not a leave or extra pay
+                    if (!cell.classList.contains('leave-cell') && !cell.classList.contains('extra-pay-cell')) {
+                        const shiftType = cell.textContent.trim();
+                        if (shiftDescriptions[shiftType]) {
+                            cell.setAttribute('title', shiftDescriptions[shiftType]);
+                        }
                     }
                 });
             }
@@ -387,10 +566,9 @@
 
                 const employees = employeesStr.split('\n').map(name => name.trim()).filter(name => name !== '');
 
-                const startDate = new Date(startDateStr);
-                startDate.setHours(0, 0, 0, 0);
-                const endDate = new Date(endDateStr);
-                endDate.setHours(0, 0, 0, 0);
+                // Use parseDateString to ensure local time interpretation
+                const startDate = parseDateString(startDateStr);
+                const endDate = parseDateString(endDateStr);
 
                 if (startDate > endDate) {
                     showMessage('The start date cannot be after the end date. Please correct.', 'error');
@@ -398,10 +576,10 @@
                 }
 
                 const dates = [];
-                let currentDate = new Date(startDate);
+                let currentDate = new Date(startDate); // Create a new Date object to avoid modifying original startDate
 
                 while (currentDate <= endDate) {
-                    dates.push(new Date(currentDate));
+                    dates.push(new Date(currentDate)); // Push a copy of the current date
                     currentDate.setDate(currentDate.getDate() + 1);
                 }
 
@@ -434,8 +612,10 @@
                 });
                 tableHTML += `</tr></thead><tbody>`;
 
-                // Store shift counts for summary
-                const employeeShiftCounts = {};
+                // Reset employeeShiftCounts for fresh calculation
+                employeeLeaveCounts = {}; // Clear previous leave counts before recalculating
+                const currentEmployeeShiftCounts = {}; // Use a temporary object for this generation cycle
+
                 let totalSundaysInRosterPeriod = 0; // Initialize total Sundays for the period
 
                 // Calculate total Sundays in the roster period (this is constant for all employees)
@@ -445,33 +625,102 @@
                     }
                 });
 
+                console.log('DEBUG: Roster generation using employeeLeaveData:', JSON.stringify(employeeLeaveData));
+                console.log('DEBUG: Roster generation using employeeExtraPayData:', JSON.stringify(employeeExtraPayData));
+
 
                 // Add rows for each employee
-                employees.forEach((employeeName, empIndex) => {
-                    employeeShiftCounts[employeeName] = { 
+                employees.forEach((employeeName) => {
+                    // Initialize currentEmployeeShiftCounts for this employee
+                    currentEmployeeShiftCounts[employeeName] = { 
                         D: 0, 
                         N: 0, 
                         O: 0, 
                         normalHours: 0,
-                        totalSundays: totalSundaysInRosterPeriod, // Add total Sundays
-                        sundayHoursTimeAndAHalf: totalSundaysInRosterPeriod * 18 // Calculate Sunday hours (12 hours * 1.5)
+                        totalSundays: totalSundaysInRosterPeriod,
+                        sundayHoursTimeAndAHalf: totalSundaysInRosterPeriod * 18,
+                        'annual leave': 0, // Initialize leave counts
+                        'sick leave': 0,
+                        'family responsibility': 0,
+                        'unpaid leave': 0
                     }; 
+                    // Ensure employeeLeaveCounts is initialized for this employee
+                    if (!employeeLeaveCounts[employeeName]) {
+                        employeeLeaveCounts[employeeName] = {
+                            'annual leave': 0,
+                            'sick leave': 0,
+                            'family responsibility': 0,
+                            'unpaid leave': 0
+                        };
+                    }
+
+
                     tableHTML += `<tr><td class="employee-name">${employeeName}</td>`;
                     dates.forEach(date => {
-                        const diffTime = Math.abs(date.getTime() - startDate.getTime());
-                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                        const dayIndexInCycle = diffDays % 9;
+                        // Use formatDateToYYYYMMDD for consistent string representation
+                        const dateString = formatDateToYYYYMMDD(date); 
+                        let cellContent = '';
+                        let cellClass = '';
+                        let cellTitle = '';
 
-                        const shift = getShiftType(dayIndexInCycle);
+                        // Priority: Leave > Extra Pay > Regular Shift
+                        if (employeeLeaveData[employeeName] && employeeLeaveData[employeeName][dateString]) {
+                            // This day is a leave day
+                            const leaveType = employeeLeaveData[employeeName][dateString];
+                            let displayCode = '';
+                            switch (leaveType) {
+                                case 'annual leave': displayCode = 'AL'; break;
+                                case 'sick leave': displayCode = 'SL'; break;
+                                case 'family responsibility': displayCode = 'FRL'; break;
+                                case 'unpaid leave': displayCode = 'UL'; break;
+                                default: displayCode = 'L'; // Generic Leave
+                            }
+                            cellContent = displayCode;
+                            // Ensure the class name matches the CSS definition
+                            cellClass = `leave-cell leave-${leaveType.replace(/\s/g, '-')}`; 
+                            cellTitle = `Leave: ${leaveType.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}`; 
+                            
+                            // Increment leave count for the employee in the summary data
+                            currentEmployeeShiftCounts[employeeName][leaveType]++;
+                            console.log(`DEBUG: Applying LEAVE for ${employeeName} on ${dateString}: Content='${cellContent}', Type='${leaveType}', Class='${cellClass}'`);
+
+                        } else if (employeeExtraPayData[employeeName] && employeeExtraPayData[employeeName][dateString]) {
+                            // This day is an extra pay day
+                            const extraPayType = employeeExtraPayData[employeeName][dateString];
+                            let displayCode = '';
+                            switch (extraPayType) {
+                                case 'day overtime': displayCode = 'DO'; break;
+                                case 'night overtime': displayCode = 'NO'; break;
+                                case 'public holiday day shift': displayCode = 'PHD'; break;
+                                case 'public holiday night shift': displayCode = 'PHN'; break;
+                                case 'one normal time and one o/t 2': displayCode = 'OT2'; break;
+                                default: displayCode = 'EP'; // Generic Extra Pay
+                            }
+                            cellContent = displayCode;
+                            cellClass = `extra-pay-cell extra-pay-${extraPayType.replace(/\s/g, '-')}`; 
+                            cellTitle = `Extra Pay: ${extraPayType.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}`; 
+                            console.log(`DEBUG: Applying EXTRA PAY for ${employeeName} on ${dateString}: Content='${cellContent}', Type='${extraPayType}', Class='${cellClass}'`);
+
+                        } else {
+                            // If no leave or extra pay, determine the regular shift
+                            const diffTime = Math.abs(date.getTime() - startDate.getTime());
+                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                            const dayIndexInCycle = diffDays % 9;
+                            const shift = getShiftType(dayIndexInCycle);
+                            cellContent = shift;
+
+                            // Increment shift count for the employee, only if it's a regular shift
+                            currentEmployeeShiftCounts[employeeName][shift]++;
+                        }
+
                         const isSunday = date.getDay() === 0; // 0 is Sunday
-                        const cellHighlightClass = isSunday ? ' sunday-column-cell' : ''; // Apply cell highlight for data cells
-                        tableHTML += `<td class="${cellHighlightClass}">${shift}</td>`;
-                        
-                        // Increment shift count for the employee
-                        employeeShiftCounts[employeeName][shift]++;
+                        const sundayClass = isSunday ? ' sunday-column-cell' : ''; // Apply cell highlight for data cells
+
+                        tableHTML += `<td class="${cellClass}${sundayClass}" title="${cellTitle}">${cellContent}</td>`;
+                        console.log(`DEBUG: Final Cell for ${employeeName} on ${dateString}: Content='${cellContent}', Class='${cellClass}${sundayClass}', Title='${cellTitle}'`);
                     });
                     // Calculate normal hours after all shifts for the employee are counted
-                    employeeShiftCounts[employeeName].normalHours = (employeeShiftCounts[employeeName].D + employeeShiftCounts[employeeName].N + employeeShiftCounts[employeeName].O) * 12;
+                    currentEmployeeShiftCounts[employeeName].normalHours = (currentEmployeeShiftCounts[employeeName].D + currentEmployeeShiftCounts[employeeName].N) * 12; // Only D and N count for normal hours
                     tableHTML += `</tr>`;
                 });
 
@@ -482,17 +731,20 @@
                 // Apply descriptions if already generated
                 applyShiftDescriptions();
 
-                // Generate and display summary table
-                let summaryHTML = `<table class="summary-table"><thead><tr><th>Employee Name</th><th>Total Day Shifts (D)</th><th>Total Night Shifts (N)</th><th>Total Off Days (O)</th><th>Normal Hours Total</th><th>Total Sundays</th><th>Sunday Hours Time and a Half</th></tr></thead><tbody>`;
-                for (const employeeName in employeeShiftCounts) {
-                    const counts = employeeShiftCounts[employeeName];
-                    summaryHTML += `<tr><td>${employeeName}</td><td>${counts.D}</td><td>${counts.N}</td><td>${counts.O}</td><td>${counts.normalHours}</td><td>${counts.totalSundays}</td><td>${counts.sundayHoursTimeAndAHalf}</td></tr>`;
+                // Generate and display summary table using currentEmployeeShiftCounts
+                let summaryHTML = `<table class="summary-table"><thead><tr><th>Employee Name</th><th>Total Day Shifts (D)</th><th>Total Night Shifts (N)</th><th>Total Off Days (O)</th><th>Normal Hours Total</th><th>Total Sundays</th><th>Sunday Hours Time and a Half</th><th>Annual Leave</th><th>Sick Leave</th><th>Family Responsibility</th><th>Unpaid Leave</th></tr></thead><tbody>`;
+                for (const employeeName in currentEmployeeShiftCounts) {
+                    const counts = currentEmployeeShiftCounts[employeeName];
+                    summaryHTML += `<tr><td>${employeeName}</td><td>${counts.D}</td><td>${counts.N}</td><td>${counts.O}</td><td>${counts.normalHours}</td><td>${counts.totalSundays}</td><td>${counts.sundayHoursTimeAndAHalf}</td><td>${counts['annual leave']}</td><td>${counts['sick leave']}</td><td>${counts['family responsibility']}</td><td>${counts['unpaid leave']}</td></tr>`;
                 }
                 summaryHTML += `</tbody></table>`;
                 summaryTableContainer.innerHTML = summaryHTML;
                 rosterSummaryDiv.classList.remove('hidden'); // Show the summary div
 
                 showMessage('Roster generated successfully!', 'success');
+                populateEmployeeDropdowns(); // Populate both employee dropdowns after roster generation
+                displayLeaveCounts(); // Update leave counts display
+                displayExtraPayDetails(); // Update extra pay display
             }
 
             /**
@@ -508,6 +760,17 @@
                 endDateInput.value = '';
                 employeesTextarea.value = '';
                 shiftDescriptions = null; // Clear cached descriptions
+                employeeLeaveData = {}; // Clear leave data
+                employeeLeaveCounts = {}; // Clear leave counts
+                employeeExtraPayData = {}; // Clear extra pay data
+                
+                // Clear dynamic input rows
+                leaveInputsContainer.innerHTML = '';
+                extraPayInputsContainer.innerHTML = '';
+
+                populateEmployeeDropdowns(); // Clear employee dropdowns
+                displayLeaveCounts(); // Clear leave counts display
+                displayExtraPayDetails(); // Clear extra pay display
                 hideMessage();
                 showMessage('Roster cleared.', 'info');
             }
@@ -562,6 +825,11 @@
                     const rowData = [];
                     cols.forEach(col => {
                         let text = col.innerText.trim();
+                        // If the cell has a title (meaning it's a leave or extra pay day), use the title for CSV
+                        const title = col.getAttribute('title');
+                        if (title && (title.startsWith('Leave: ') || title.startsWith('Extra Pay: '))) {
+                            text = title.replace('Leave: ', '').replace('Extra Pay: ', ''); // Use the full type for CSV
+                        }
                         if (text.includes(',')) {
                             text = `"${text.replace(/"/g, '""')}"`;
                         }
@@ -588,6 +856,20 @@
                             sRowData.push(sText);
                         });
                         csv.push(sRowData.join(','));
+                    });
+                }
+
+                // Add Extra Pay Details to CSV
+                if (!extraPayOutput.classList.contains('hidden') && extraPayList.children.length > 0) {
+                    csv.push('\n');
+                    csv.push('Extra Pay Details');
+                    const extraPayItems = extraPayList.querySelectorAll('li');
+                    extraPayItems.forEach(item => {
+                        let text = item.textContent.trim();
+                        if (text.includes(',')) {
+                            text = `"${text.replace(/"/g, '""')}"`;
+                        }
+                        csv.push(text);
                     });
                 }
 
@@ -678,11 +960,426 @@
                 }
             }
 
+            // --- Leave Management Functions ---
+
+            /**
+             * Creates and appends a new leave input row.
+             */
+            function createLeaveInputRow(initialEmployee = '') {
+                const row = document.createElement('div');
+                row.classList.add('dynamic-input-row');
+
+                row.innerHTML = `
+                    <div class="input-group">
+                        <label for="leaveEmployeeSelect" class="block text-sm font-medium text-gray-700">Employee:</label>
+                        <select class="employee-select mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                            <option value="">-- Select an Employee --</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="leaveTypeSelect" class="block text-sm font-medium text-gray-700">Leave Type:</label>
+                        <select class="leave-type-select mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                            <option value="annual leave">Annual Leave</option>
+                            <option value="sick leave">Sick Leave</option>
+                            <option value="family responsibility">Family Responsibility Leave</option>
+                            <option value="unpaid leave">Unpaid Leave</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="leaveDate" class="block text-sm font-medium text-gray-700">Date:</label>
+                        <input type="date" class="leave-date-input mt-1 block w-full pl-3 pr-3 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                    </div>
+                    <button type="button" class="remove-btn">Remove</button>
+                `;
+
+                const employeeSelect = row.querySelector('.employee-select');
+                const dateInput = row.querySelector('.leave-date-input');
+                const removeBtn = row.querySelector('.remove-btn');
+
+                // Populate employee dropdown in this new row
+                populateEmployeeDropdownInSingleSelect(employeeSelect, initialEmployee);
+                
+                // IMPORTANT: Call updateDynamicRowDateConstraints for the new row's date input
+                dateInput.setAttribute('min', startDateInput.value);
+                dateInput.setAttribute('max', endDateInput.value);
+
+                removeBtn.addEventListener('click', () => {
+                    const employeeName = employeeSelect.value;
+                    const dateToRemove = dateInput.value;
+
+                    // Remove from global data if it exists
+                    if (employeeName && dateToRemove && employeeLeaveData[employeeName] && employeeLeaveData[employeeName][dateToRemove]) {
+                        delete employeeLeaveData[employeeName][dateToRemove];
+                        // If no more leave for this employee, remove employee entry from data
+                        if (Object.keys(employeeLeaveData[employeeName]).length === 0) {
+                            delete employeeLeaveData[employeeName];
+                        }
+                        showMessage(`Removed leave for ${employeeName} on ${dateToRemove}.`, 'info');
+                        generateRoster(); // Regenerate roster to reflect removal
+                    } else {
+                        showMessage('No specific leave record found to remove for this row, just removing the input row.', 'info');
+                    }
+                    row.remove(); // Remove the HTML row
+                    displayLeaveCounts(); // Update leave counts display
+                });
+
+                leaveInputsContainer.appendChild(row);
+                return row; // Return the created row for potential further manipulation
+            }
+
+            /**
+             * Populates a single employee select dropdown.
+             * @param {HTMLSelectElement} selectElement - The select element to populate.
+             * @param {string} selectedValue - The value to pre-select.
+             */
+            function populateEmployeeDropdownInSingleSelect(selectElement, selectedValue = '') {
+                const employeeNamesText = employeesTextarea.value.trim();
+                const employeeNames = employeeNamesText.split('\n').map(name => name.trim()).filter(name => name !== '');
+
+                selectElement.innerHTML = '<option value="">-- Select an Employee --</option>';
+                employeeNames.forEach(name => {
+                    const option = document.createElement('option');
+                    option.value = name;
+                    option.textContent = name;
+                    selectElement.appendChild(option);
+                });
+
+                if (selectedValue) {
+                    selectElement.value = selectedValue;
+                }
+            }
+
+            /**
+             * Populates all employee dropdowns (initial and dynamic).
+             */
+            function populateEmployeeDropdowns() {
+                // Populate initial dropdowns (if any, though we replaced them with dynamic rows)
+                // This function is now mainly for populating dropdowns in newly added dynamic rows
+                document.querySelectorAll('#leaveInputsContainer .employee-select').forEach(select => {
+                    populateEmployeeDropdownInSingleSelect(select, select.value); // Re-populate, keeping current selection
+                });
+                document.querySelectorAll('#extraPayInputsContainer .employee-select').forEach(select => {
+                    populateEmployeeDropdownInSingleSelect(select, select.value); // Re-populate, keeping current selection
+                });
+            }
+
+            /**
+             * Applies all leave entries from dynamic rows.
+             */
+            function applyAllLeaveEntries() {
+                let anyApplied = false;
+                let hasOverallError = false; // Flag for overall errors
+
+                // Create a temporary object to hold all new valid leave data
+                const tempEmployeeLeaveData = {};
+
+                const leaveRows = leaveInputsContainer.querySelectorAll('.dynamic-input-row');
+                if (leaveRows.length === 0) {
+                    showMessage('No leave entries to apply.', 'warning');
+                    return;
+                }
+
+                for (const row of leaveRows) { // Use for...of to allow 'continue'
+                    const employeeSelect = row.querySelector('.employee-select');
+                    const leaveTypeSelect = row.querySelector('.leave-type-select');
+                    const leaveDateInput = row.querySelector('.leave-date-input');
+
+                    const selectedEmployee = employeeSelect.value;
+                    const selectedLeaveType = leaveTypeSelect.value;
+                    const selectedDateStr = leaveDateInput.value; // Get the string directly
+
+                    if (!selectedEmployee || selectedEmployee === "" || !selectedLeaveType || selectedLeaveType === "" || !selectedDateStr) {
+                        showMessage('Please fill all fields in each leave entry row.', 'error');
+                        hasOverallError = true;
+                        continue; // Skip this row and move to the next
+                    }
+
+                    const rosterStartDate = parseDateString(startDateInput.value);
+                    const rosterEndDate = parseDateString(endDateInput.value);
+                    const leaveDate = parseDateString(selectedDateStr); // Parse the string to a Date object
+
+                    if (leaveDate < rosterStartDate || leaveDate > rosterEndDate) {
+                        showMessage(`Leave date ${selectedDateStr} for ${selectedEmployee} is outside the roster period.`, 'error');
+                        hasOverallError = true;
+                        continue; // Skip this row and move to the next
+                    }
+
+                    if (!tempEmployeeLeaveData[selectedEmployee]) {
+                        tempEmployeeLeaveData[selectedEmployee] = {};
+                    }
+                    tempEmployeeLeaveData[selectedEmployee][selectedDateStr] = selectedLeaveType; // Store the original string
+                    anyApplied = true;
+                }
+
+                if (hasOverallError && !anyApplied) {
+                    showMessage('No leave entries could be applied due to missing information or invalid dates.', 'error');
+                    return;
+                }
+
+                // Replace the global data with the collected valid data
+                employeeLeaveData = tempEmployeeLeaveData;
+                console.log('DEBUG: employeeLeaveData after applying all:', JSON.stringify(employeeLeaveData));
+
+
+                if (anyApplied) {
+                    showMessage('All valid leave entries applied. Roster updated.', 'success');
+                    generateRoster(); // Regenerate roster to reflect all changes
+                } else if (!hasOverallError) { // Only show info if no errors and nothing applied
+                    showMessage('No new valid leave entries were found to apply.', 'info');
+                }
+            }
+
+            /**
+             * Displays the total counts for each leave type per employee, including dates.
+             */
+            function displayLeaveCounts() {
+                leaveCountsList.innerHTML = ''; // Clear previous counts
+                let hasLeaveData = false;
+
+                for (const employee in employeeLeaveData) { // Iterate through employeeLeaveData to get dates
+                    const employeeDates = employeeLeaveData[employee];
+                    const leaveTypesWithDates = {
+                        'annual leave': [],
+                        'sick leave': [],
+                        'family responsibility': [],
+                        'unpaid leave': []
+                    };
+
+                    for (const date in employeeDates) {
+                        const type = employeeDates[date];
+                        if (leaveTypesWithDates[type]) {
+                            leaveTypesWithDates[type].push(date);
+                        }
+                    }
+
+                    let employeeHasLeave = false;
+                    const employeeSummaryItems = [];
+
+                    for (const type in leaveTypesWithDates) {
+                        if (leaveTypesWithDates[type].length > 0) {
+                            employeeHasLeave = true;
+                            hasLeaveData = true;
+                            const formattedType = type.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                            const datesList = leaveTypesWithDates[type].sort().join(', '); // Sort dates for readability
+                            employeeSummaryItems.push(`${formattedType} (${leaveTypesWithDates[type].length} days): ${datesList}`);
+                        }
+                    }
+
+                    if (employeeHasLeave) {
+                        const listItem = document.createElement('li');
+                        listItem.innerHTML = `<strong>${employee}:</strong><br> ${employeeSummaryItems.join('<br>')}`;
+                        leaveCountsList.appendChild(listItem);
+                    }
+                }
+
+                if (hasLeaveData) {
+                    leaveCountOutput.classList.remove('hidden');
+                } else {
+                    leaveCountOutput.classList.add('hidden');
+                }
+            }
+
+            // --- Extra Pay Management Functions ---
+
+            /**
+             * Creates and appends a new extra pay input row.
+             */
+            function createExtraPayInputRow(initialEmployee = '') {
+                const row = document.createElement('div');
+                row.classList.add('dynamic-input-row');
+
+                row.innerHTML = `
+                    <div class="input-group">
+                        <label for="extraPayEmployeeSelect" class="block text-sm font-medium text-gray-700">Employee:</label>
+                        <select class="employee-select mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                            <option value="">-- Select an Employee --</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="extraPayTypeSelect" class="block text-sm font-medium text-gray-700">Extra Pay Type:</label>
+                        <select class="extra-pay-type-select mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                            <option value="day overtime">Day Overtime</option>
+                            <option value="night overtime">Night Overtime</option>
+                            <option value="public holiday day shift">Public Holiday Day Shift</option>
+                            <option value="public holiday night shift">Public Holiday Night Shift</option>
+                            <option value="one normal time and one o/t 2">One Normal Time and One O/T 2</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="extraPayDate" class="block text-sm font-medium text-gray-700">Date:</label>
+                        <input type="date" class="extra-pay-date-input mt-1 block w-full pl-3 pr-3 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                    </div>
+                    <button type="button" class="remove-btn">Remove</button>
+                `;
+                const employeeSelect = row.querySelector('.employee-select');
+                const dateInput = row.querySelector('.extra-pay-date-input');
+                const removeBtn = row.querySelector('.remove-btn');
+
+                // Populate employee dropdown in this new row
+                populateEmployeeDropdownInSingleSelect(employeeSelect, initialEmployee);
+                
+                // IMPORTANT: Call updateDynamicRowDateConstraints for the new row's date input
+                dateInput.setAttribute('min', startDateInput.value);
+                dateInput.setAttribute('max', endDateInput.value);
+
+                // Add onchange listener for immediate feedback
+                dateInput.addEventListener('change', () => {
+                    const selectedEmployee = employeeSelect.value;
+                    const selectedDate = dateInput.value;
+                    if (selectedEmployee && selectedDate && employeeLeaveData[selectedEmployee] && employeeLeaveData[selectedEmployee][selectedDate]) {
+                        showMessage(`Warning: ${selectedEmployee} is already on leave on ${selectedDate}. Extra pay cannot be applied.`, 'warning');
+                        dateInput.value = ''; // Clear the date input to prevent accidental application
+                    } else {
+                        hideMessage(); // Clear message if valid date is selected
+                    }
+                });
+
+                removeBtn.addEventListener('click', () => {
+                    const employeeName = employeeSelect.value;
+                    const dateToRemove = dateInput.value;
+
+                    // Remove from global data if it exists
+                    if (employeeName && dateToRemove && employeeExtraPayData[employeeName] && employeeExtraPayData[employeeName][dateToRemove]) {
+                        delete employeeExtraPayData[employeeName][dateToRemove];
+                        // If no more extra pay for this employee, remove employee entry from data
+                        if (Object.keys(employeeExtraPayData[employeeName]).length === 0) {
+                            delete employeeExtraPayData[employeeName];
+                        }
+                        showMessage(`Removed extra pay for ${employeeName} on ${dateToRemove}.`, 'info');
+                        generateRoster(); // Regenerate roster to reflect removal
+                    } else {
+                        showMessage('No specific extra pay record found to remove for this row, just removing the input row.', 'info');
+                    }
+                    row.remove(); // Remove the HTML row
+                    displayExtraPayDetails(); // Update extra pay display
+                });
+
+                extraPayInputsContainer.appendChild(row);
+                return row;
+            }
+
+            /**
+             * Applies all extra pay entries from dynamic rows.
+             */
+            function applyAllExtraPayEntries() {
+                let anyApplied = false;
+                let errorMessages = []; // Collect specific error messages
+
+                // Create a temporary object to hold all new valid extra pay data
+                const tempEmployeeExtraPayData = {};
+
+                const extraPayRows = extraPayInputsContainer.querySelectorAll('.dynamic-input-row');
+                if (extraPayRows.length === 0) {
+                    showMessage('No extra pay entries to apply.', 'warning');
+                    return;
+                }
+
+                for (const row of extraPayRows) {
+                    const employeeSelect = row.querySelector('.employee-select');
+                    const extraPayTypeSelect = row.querySelector('.extra-pay-type-select');
+                    const extraPayDateInput = row.querySelector('.extra-pay-date-input');
+
+                    const selectedEmployee = employeeSelect.value;
+                    const selectedExtraPayType = extraPayTypeSelect.value;
+                    const selectedDateStr = extraPayDateInput.value; // Get the string directly
+
+                    console.log(`DEBUG: Processing Extra Pay Entry - Employee: ${selectedEmployee}, Type: ${selectedExtraPayType}, Date: ${selectedDateStr}`);
+
+                    if (!selectedEmployee || selectedEmployee === "" || !selectedExtraPayType || selectedExtraPayType === "" || !selectedDateStr) {
+                        errorMessages.push(`Missing information for an extra pay entry (Employee: "${selectedEmployee}", Date: "${selectedDateStr}").`);
+                        console.log(`DEBUG: Skipped due to missing info.`);
+                        continue;
+                    }
+
+                    const rosterStartDate = parseDateString(startDateInput.value);
+                    const rosterEndDate = parseDateString(endDateInput.value);
+                    const extraPayDate = parseDateString(selectedDateStr); // Parse the string to a Date object
+
+                    if (extraPayDate < rosterStartDate || extraPayDate > rosterEndDate) {
+                        errorMessages.push(`Extra pay date ${selectedDateStr} for ${selectedEmployee} is outside the roster period.`);
+                        console.log(`DEBUG: Skipped due to date out of range.`);
+                        continue;
+                    }
+
+                    // VALIDATION: Check if employee is on leave on this date
+                    if (employeeLeaveData[selectedEmployee] && employeeLeaveData[selectedEmployee][selectedDateStr]) {
+                        errorMessages.push(`Conflict: ${selectedEmployee} is on leave (${employeeLeaveData[selectedEmployee][selectedDateStr]}) on ${selectedDateStr}. Extra pay cannot be applied.`);
+                        console.log(`DEBUG: Skipped due to leave conflict.`);
+                        continue;
+                    }
+
+                    if (!tempEmployeeExtraPayData[selectedEmployee]) {
+                        tempEmployeeExtraPayData[selectedEmployee] = {};
+                    }
+                    tempEmployeeExtraPayData[selectedEmployee][selectedDateStr] = selectedExtraPayType; // Store the original string
+                    anyApplied = true;
+                    console.log(`DEBUG: Successfully added extra pay for ${selectedEmployee} on ${selectedDateStr}.`);
+                }
+
+                // Replace the global data with the collected valid data
+                employeeExtraPayData = tempEmployeeExtraPayData;
+                console.log('DEBUG: employeeExtraPayData after applying all:', JSON.stringify(employeeExtraPayData));
+
+                if (anyApplied) {
+                    showMessage('All valid extra pay entries applied. Roster updated.', 'success');
+                } else if (errorMessages.length > 0) {
+                    // If no entries were applied but there were errors
+                    showMessage(`Some extra pay entries could not be applied: ${errorMessages.join('; ')}`, 'error');
+                } else {
+                    showMessage('No new valid extra pay entries were found to apply.', 'info');
+                }
+
+                // Always regenerate roster to reflect any changes (additions or removals)
+                generateRoster(); 
+            }
+
+            /**
+             * Displays the details of extra pay entries.
+             */
+            function displayExtraPayDetails() {
+                extraPayList.innerHTML = ''; // Clear previous details
+                let hasExtraPayData = false;
+
+                for (const employee in employeeExtraPayData) {
+                    const employeeDates = employeeExtraPayData[employee];
+                    const extraPayItems = [];
+
+                    for (const date in employeeDates) {
+                        const type = employeeDates[date];
+                        const formattedType = type.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                        extraPayItems.push(`${date}: ${formattedType}`);
+                        hasExtraPayData = true;
+                    }
+
+                    if (extraPayItems.length > 0) {
+                        const listItem = document.createElement('li');
+                        listItem.innerHTML = `<strong>${employee}:</strong><br> ${extraPayItems.sort().join('<br>')}`; // Sort by date
+                        extraPayList.appendChild(listItem);
+                    }
+                }
+
+                if (hasExtraPayData) {
+                    extraPayOutput.classList.remove('hidden');
+                } else {
+                    extraPayOutput.classList.add('hidden');
+                }
+            }
+
+
             // Event Listeners
             generateRosterBtn.addEventListener('click', generateRoster);
             exportCsvBtn.addEventListener('click', exportRosterToCSV);
             generateShiftInsightsBtn.addEventListener('click', generateShiftInsights); // Attach LLM function
             clearRosterBtn.addEventListener('click', clearRoster);
+
+            // Event Listeners for Leave Management
+            employeesTextarea.addEventListener('input', populateEmployeeDropdowns); // Populate dropdowns when employee names change
+            addLeaveEntryBtn.addEventListener('click', () => createLeaveInputRow()); // Add a new blank row
+            applyAllLeaveBtn.addEventListener('click', applyAllLeaveEntries); // Apply all entries
+
+            // Event Listeners for Extra Pay Management
+            addExtraPayEntryBtn.addEventListener('click', () => createExtraPayInputRow()); // Add a new blank row
+            applyAllExtraPayBtn.addEventListener('click', applyAllExtraPayEntries); // Apply all entries
         });
     </script>
 </body>
