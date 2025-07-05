@@ -178,9 +178,14 @@
             margin-bottom: 15px;
             text-align: center;
         }
+        .summary-table-container { /* New class for scrollability */
+            overflow-x: auto;
+            border-radius: 12px; /* Inherit border-radius from parent */
+        }
         .summary-table {
             width: 100%;
             border-collapse: collapse;
+            min-width: 800px; /* Ensure minimum width for scrolling */
         }
         .summary-table th,
         .summary-table td {
@@ -199,11 +204,19 @@
         .summary-table tbody tr:hover {
             background-color: #e0f2fe;
         }
+        /* Center calculation columns */
         .summary-table td:last-child,
         .summary-table td:nth-last-child(2),
         .summary-table td:nth-last-child(3),
-        .summary-table td:nth-last-child(4) { /* Added for new columns */
-            text-align: center; /* Center the calculation columns */
+        .summary-table td:nth-last-child(4),
+        .summary-table td:nth-last-child(5), /* New: Extra Pay columns */
+        .summary-table td:nth-last-child(6),
+        .summary-table td:nth-last-child(7),
+        .summary-table td:nth-last-child(8),
+        .summary-table td:nth-last-child(9),
+        .summary-table td:nth-last-child(10), /* Added for 'normal time' */
+        .summary-table td:nth-last-child(11) { /* Added for 'Day&Night' */
+            text-align: center;
             font-weight: 500;
         }
 
@@ -249,6 +262,10 @@
         }
         .extra-pay-one-normal-time-and-one-o-t-2 {
             background-color: #ec4899; /* Pink for OT2 (Tailwind pink-500) */
+        }
+        /* New extra pay types */
+        .extra-pay-day-night { /* Combined Day&Night */
+            background-color: #a855f7; /* Violet for Day&Night (Tailwind violet-500) */
         }
 
         /* Dynamic row styling */
@@ -347,7 +364,7 @@
 
         <div id="rosterSummary" class="roster-summary hidden">
             <h2>Roster Summary</h2>
-            <div id="summaryTableContainer">
+            <div id="summaryTableContainer" class="summary-table-container">
                 <!-- Summary table will be generated here -->
             </div>
         </div>
@@ -366,6 +383,16 @@
         // Global variable to store extra pay data
         // Example: { "Employee Name": { "YYYY-MM-DD": "Extra Pay Type" } }
         let employeeExtraPayData = {};
+
+        // Define all possible extra pay types for summary table columns
+        const ALL_EXTRA_PAY_TYPES = [
+            'day overtime',
+            'night overtime',
+            'public holiday day shift',
+            'public holiday night shift',
+            'one normal time and one o/t 2',
+            'Day&Night' // Modified extra pay type
+        ];
 
         document.addEventListener('DOMContentLoaded', () => {
             const startDateInput = document.getElementById('startDate');
@@ -411,8 +438,8 @@
             employeesTextarea.value = '';
 
             /**
-             * Helper function to parse a YYYY-MM-DD string into a Date object in local time.
-             * @param {string} dateString - The date string in YYYY-MM-DD format.
+             * Helper function to parse a replete-MM-DD string into a Date object in local time.
+             * @param {string} dateString - The date string in replete-MM-DD format.
              * @returns {Date} A Date object representing the date in local time.
              */
             function parseDateString(dateString) {
@@ -422,9 +449,9 @@
             }
 
             /**
-             * Helper function to format a Date object into a YYYY-MM-DD string in local time.
+             * Helper function to format a Date object into a replete-MM-DD string in local time.
              * @param {Date} date - The Date object to format.
-             * @returns {string} The date string in YYYY-MM-DD format.
+             * @returns {string} The date string in replete-MM-DD format.
              */
             function formatDateToYYYYMMDD(date) {
                 const year = date.getFullYear();
@@ -642,18 +669,13 @@
                         'annual leave': 0, // Initialize leave counts
                         'sick leave': 0,
                         'family responsibility': 0,
-                        'unpaid leave': 0
+                        'unpaid leave': 0,
+                        'normalTime': 0 // Initialize normalTime count
                     }; 
-                    // Ensure employeeLeaveCounts is initialized for this employee
-                    if (!employeeLeaveCounts[employeeName]) {
-                        employeeLeaveCounts[employeeName] = {
-                            'annual leave': 0,
-                            'sick leave': 0,
-                            'family responsibility': 0,
-                            'unpaid leave': 0
-                        };
-                    }
-
+                    // Initialize extra pay counts for each type to 0
+                    ALL_EXTRA_PAY_TYPES.forEach(type => {
+                        currentEmployeeShiftCounts[employeeName][type] = 0;
+                    });
 
                     tableHTML += `<tr><td class="employee-name">${employeeName}</td>`;
                     dates.forEach(date => {
@@ -694,11 +716,18 @@
                                 case 'public holiday day shift': displayCode = 'PHD'; break;
                                 case 'public holiday night shift': displayCode = 'PHN'; break;
                                 case 'one normal time and one o/t 2': displayCode = 'OT2'; break;
+                                case 'Day&Night': displayCode = 'D&N'; break; // New: Day&Night Extra Pay
                                 default: displayCode = 'EP'; // Generic Extra Pay
                             }
                             cellContent = displayCode;
-                            cellClass = `extra-pay-cell extra-pay-${extraPayType.replace(/\s/g, '-')}`; 
-                            cellTitle = `Extra Pay: ${extraPayType.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}`; 
+                            cellClass = `extra-pay-cell extra-pay-${extraPayType.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase()}`; /* Adjusted for special characters */
+                            cellTitle = `Extra Pay: ${extraPayType.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ').replace('&', '&')}`; /* Handle & for title */
+                            // Increment extra pay count for the employee in the summary data
+                            currentEmployeeShiftCounts[employeeName][extraPayType]++;
+                            // Also count towards normalTime if it's a 'Day', 'Night', or 'Day&Night' type
+                            if (extraPayType === 'Day&Night') {
+                                currentEmployeeShiftCounts[employeeName]['normalTime']++;
+                            }
                             console.log(`DEBUG: Applying EXTRA PAY for ${employeeName} on ${dateString}: Content='${cellContent}', Type='${extraPayType}', Class='${cellClass}'`);
 
                         } else {
@@ -711,6 +740,10 @@
 
                             // Increment shift count for the employee, only if it's a regular shift
                             currentEmployeeShiftCounts[employeeName][shift]++;
+                            // Count Day and Night shifts for normalTime
+                            if (shift === 'D' || shift === 'N') {
+                                currentEmployeeShiftCounts[employeeName]['normalTime']++;
+                            }
                         }
 
                         const isSunday = date.getDay() === 0; // 0 is Sunday
@@ -732,10 +765,25 @@
                 applyShiftDescriptions();
 
                 // Generate and display summary table using currentEmployeeShiftCounts
-                let summaryHTML = `<table class="summary-table"><thead><tr><th>Employee Name</th><th>Total Day Shifts (D)</th><th>Total Night Shifts (N)</th><th>Total Off Days (O)</th><th>Normal Hours Total</th><th>Total Sundays</th><th>Sunday Hours Time and a Half</th><th>Annual Leave</th><th>Sick Leave</th><th>Family Responsibility</th><th>Unpaid Leave</th></tr></thead><tbody>`;
+                let summaryHTML = `<table class="summary-table"><thead><tr><th>Employee Name</th><th>Normal Time</th><th>Total Day Shifts (D)</th><th>Total Night Shifts (N)</th><th>Total Off Days (O)</th><th>Normal Hours Total</th><th>Total Sundays</th><th>Sunday Hours Time and a Half</th><th>Annual Leave</th><th>Sick Leave</th><th>Family Responsibility</th><th>Unpaid Leave</th>`; // Moved Normal Time header
+                
+                // Add Extra Pay Type headers dynamically
+                ALL_EXTRA_PAY_TYPES.forEach(type => {
+                    // Format type for display (e.g., "day overtime" -> "Day Overtime")
+                    const formattedType = type.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ').replace('&', '&');
+                    summaryHTML += `<th>${formattedType}</th>`;
+                });
+                summaryHTML += `</tr></thead><tbody>`;
+
                 for (const employeeName in currentEmployeeShiftCounts) {
                     const counts = currentEmployeeShiftCounts[employeeName];
-                    summaryHTML += `<tr><td>${employeeName}</td><td>${counts.D}</td><td>${counts.N}</td><td>${counts.O}</td><td>${counts.normalHours}</td><td>${counts.totalSundays}</td><td>${counts.sundayHoursTimeAndAHalf}</td><td>${counts['annual leave']}</td><td>${counts['sick leave']}</td><td>${counts['family responsibility']}</td><td>${counts['unpaid leave']}</td></tr>`;
+                    summaryHTML += `<tr><td>${employeeName}</td><td>${counts['normalTime']}</td><td>${counts.D}</td><td>${counts.N}</td><td>${counts.O}</td><td>${counts.normalHours}</td><td>${counts.totalSundays}</td><td>${counts.sundayHoursTimeAndAHalf}</td><td>${counts['annual leave']}</td><td>${counts['sick leave']}</td><td>${counts['family responsibility']}</td><td>${counts['unpaid leave']}</td>`; // Moved Normal Time data
+                    
+                    // Add Extra Pay Type counts dynamically
+                    ALL_EXTRA_PAY_TYPES.forEach(type => {
+                        summaryHTML += `<td>${counts[type] || 0}</td>`; // Display count, default to 0 if not present
+                    });
+                    summaryHTML += `</tr>`;
                 }
                 summaryHTML += `</tbody></table>`;
                 summaryTableContainer.innerHTML = summaryHTML;
@@ -1068,7 +1116,7 @@
              */
             function applyAllLeaveEntries() {
                 let anyApplied = false;
-                let hasOverallError = false; // Flag for overall errors
+                let hasOverallError = false; // Declare hasOverallError here
 
                 // Create a temporary object to hold all new valid leave data
                 const tempEmployeeLeaveData = {};
@@ -1203,6 +1251,7 @@
                             <option value="public holiday day shift">Public Holiday Day Shift</option>
                             <option value="public holiday night shift">Public Holiday Night Shift</option>
                             <option value="one normal time and one o/t 2">One Normal Time and One O/T 2</option>
+                            <option value="Day&Night">Day&Night</option> <!-- Updated option -->
                         </select>
                     </div>
                     <div class="input-group">
@@ -1346,7 +1395,7 @@
 
                     for (const date in employeeDates) {
                         const type = employeeDates[date];
-                        const formattedType = type.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                        const formattedType = type.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ').replace('&', '&');
                         extraPayItems.push(`${date}: ${formattedType}`);
                         hasExtraPayData = true;
                     }
