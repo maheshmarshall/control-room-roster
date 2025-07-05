@@ -100,6 +100,7 @@
             width: 100%;
             border-collapse: collapse; /* Collapse table borders */
             min-width: 800px; /* Ensure minimum width for scrolling */
+            margin-bottom: 20px; /* Space between multiple tables */
         }
         .roster-table th,
         .roster-table td {
@@ -161,6 +162,17 @@
         .sunday-column-cell {
             background-color: #fee2e2; /* Lightest red for data cells */
             color: #b91c1c; /* Darker red text */
+        }
+
+        /* Public Holiday Highlight Styles */
+        .public-holiday-column-header {
+            background-color: #fef3c7; /* Light orange/yellow for header */
+            color: #d97706; /* Darker orange/yellow text */
+            font-weight: 700;
+        }
+        .public-holiday-column-cell {
+            background-color: #fefce8; /* Lightest orange/yellow for data cells */
+            color: #b45309; /* Darker orange/yellow text */
         }
 
         /* Roster Summary Styles */
@@ -310,9 +322,20 @@
                 <label for="endDate">Roster End Date:</label>
                 <input type="date" id="endDate" class="form-input" min="" max="">
             </div>
-            <div class="input-group md:col-span-2"> <!-- Span two columns for the textarea -->
-                <label for="employees">Employee Names (One per line):</label>
-                <textarea id="employees" rows="8" placeholder="Enter employee names here..." class="form-textarea"></textarea>
+        </div>
+
+        <div class="input-section grid grid-cols-1 md:grid-cols-3 gap-6 mt-6"> <!-- New section for shifts -->
+            <div class="input-group">
+                <label for="employeesA">Shift A Employees (One per line):</label>
+                <textarea id="employeesA" rows="8" placeholder="Enter Shift A employee names here..." class="form-textarea"></textarea>
+            </div>
+            <div class="input-group">
+                <label for="employeesB">Shift B Employees (One per line):</label>
+                <textarea id="employeesB" rows="8" placeholder="Enter Shift B employee names here..." class="form-textarea"></textarea>
+            </div>
+            <div class="input-group">
+                <label for="employeesC">Shift C Employees (One per line):</label>
+                <textarea id="employeesC" rows="8" placeholder="Enter Shift C employee names here..." class="form-textarea"></textarea>
             </div>
         </div>
 
@@ -359,7 +382,7 @@
 
 
         <div id="rosterOutput" class="roster-output hidden">
-            <!-- Roster table will be generated here -->
+            <!-- Roster table(s) will be generated here -->
         </div>
 
         <div id="rosterSummary" class="roster-summary hidden">
@@ -394,10 +417,52 @@
             'Day&Night' // Modified extra pay type
         ];
 
+        // South African Public Holidays (YYYY-MM-DD format) - Observed dates
+        const SOUTH_AFRICAN_PUBLIC_HOLIDAYS = new Set([
+            // 2025
+            '2025-01-01', // New Year's Day
+            '2025-03-21', // Human Rights Day
+            '2025-04-18', // Good Friday
+            '2025-04-21', // Family Day
+            '2025-04-28', // Freedom Day (Observed, since 27th is Sunday)
+            '2025-05-01', // Workers' Day
+            '2025-06-16', // Youth Day
+            '2025-08-11', // National Women's Day (Observed, since 9th is Saturday)
+            '2025-09-24', // Heritage Day
+            '2025-12-16', // Day of Reconciliation
+            '2025-12-25', // Christmas Day
+            '2025-12-26', // Day of Goodwill
+            // 2026
+            '2026-01-01', // New Year's Day
+            '2026-03-23', // Human Rights Day (Observed, since 21st is Saturday)
+            '2026-04-03', // Good Friday
+            '2026-04-06', // Family Day
+            '2026-04-27', // Freedom Day
+            '2026-05-01', // Workers' Day
+            '2026-06-16', // Youth Day
+            '2026-08-10', // National Women's Day (Observed, since 9th is Sunday)
+            '2026-09-24', // Heritage Day
+            '2026-12-16', // Day of Reconciliation
+            '2026-12-25', // Christmas Day
+            '2026-12-26'  // Day of Goodwill
+        ]);
+
+        /**
+         * Checks if a given date string is a South African public holiday.
+         * @param {string} dateString - The date string in replete-MM-DD format.
+         * @returns {boolean} True if it's a public holiday, false otherwise.
+         */
+        function isPublicHoliday(dateString) {
+            return SOUTH_AFRICAN_PUBLIC_HOLIDAYS.has(dateString);
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             const startDateInput = document.getElementById('startDate');
             const endDateInput = document.getElementById('endDate');
-            const employeesTextarea = document.getElementById('employees');
+            const employeesATextarea = document.getElementById('employeesA');
+            const employeesBTextarea = document.getElementById('employeesB');
+            const employeesCTextarea = document.getElementById('employeesC');
+
             const generateRosterBtn = document.getElementById('generateRosterBtn');
             const exportCsvBtn = document.getElementById('exportCsvBtn');
             const generateShiftInsightsBtn = document.getElementById('generateShiftInsightsBtn'); // New: LLM Button
@@ -434,8 +499,10 @@
             endDateInput.setAttribute('min', overallMinDate);
             endDateInput.setAttribute('max', overallMaxDate);
 
-            // Set employee textarea to be blank by default
-            employeesTextarea.value = '';
+            // Set employee textareas to be blank by default
+            employeesATextarea.value = '';
+            employeesBTextarea.value = '';
+            employeesCTextarea.value = '';
 
             /**
              * Helper function to parse a replete-MM-DD string into a Date object in local time.
@@ -573,6 +640,158 @@
             }
 
             /**
+             * Generates a single roster table for a given set of employees.
+             * @param {Array<string>} employees - List of employee names for this shift.
+             * @param {Array<Date>} dates - List of dates in the roster period.
+             * @param {Object} currentEmployeeShiftCounts - Object to accumulate shift counts for all employees.
+             * @param {string} shiftName - The name of the shift (e.g., "Shift A").
+             * @returns {string} The HTML string for the generated roster table.
+             */
+            function generateSingleRosterTable(employees, dates, currentEmployeeShiftCounts, shiftName) {
+                // Array for short day names (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+                const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+                let tableHTML = `<h3 class="text-xl font-semibold mb-2 mt-4 text-center">${shiftName} Roster</h3>`;
+                tableHTML += `<table class="roster-table"><thead>`;
+                
+                // First header row for "Employee Name" and Dates
+                tableHTML += `<tr><th class="employee-header" rowspan="2">Employee Name</th>`; // rowspan for employee header
+                dates.forEach(date => {
+                    // Check if the current date is a Sunday or Public Holiday
+                    const dateString = formatDateToYYYYMMDD(date);
+                    const isSunday = date.getDay() === 0; // 0 is Sunday
+                    const isPH = isPublicHoliday(dateString);
+
+                    let headerHighlightClass = '';
+                    if (isSunday) {
+                        headerHighlightClass += ' sunday-column-header';
+                    }
+                    if (isPH) {
+                        headerHighlightClass += ' public-holiday-column-header';
+                    }
+                    tableHTML += `<th class="${headerHighlightClass.trim()}">${date.getDate()}/${(date.getMonth() + 1).toString().padStart(2, '0')}</th>`;
+                });
+                tableHTML += `</tr>`;
+
+                // Second header row for Day of the Week
+                tableHTML += `<tr>`;
+                dates.forEach(date => {
+                    const dateString = formatDateToYYYYMMDD(date);
+                    const isSunday = date.getDay() === 0; // 0 is Sunday
+                    const isPH = isPublicHoliday(dateString);
+
+                    let highlightClass = '';
+                    if (isSunday) {
+                        highlightClass += ' sunday-column-header';
+                    }
+                    if (isPH) {
+                        highlightClass += ' public-holiday-column-header';
+                    }
+                    tableHTML += `<th class="${highlightClass.trim()}">${dayNames[date.getDay()]}</th>`;
+                });
+                tableHTML += `</tr></thead><tbody>`;
+
+                // Add rows for each employee in this shift
+                employees.forEach((employeeName) => {
+                    // Ensure employee entry exists in currentEmployeeShiftCounts
+                    if (!currentEmployeeShiftCounts[employeeName]) {
+                        currentEmployeeShiftCounts[employeeName] = { 
+                            D: 0, N: 0, O: 0, normalHours: 0,
+                            totalSundays: 0, sundayHoursTimeAndAHalf: 0,
+                            'annual leave': 0, 'sick leave': 0, 'family responsibility': 0, 'unpaid leave': 0,
+                            'normalTime': 0, 'publicHolidays': 0 
+                        }; 
+                        ALL_EXTRA_PAY_TYPES.forEach(type => {
+                            currentEmployeeShiftCounts[employeeName][type] = 0;
+                        });
+                    }
+
+                    tableHTML += `<tr><td class="employee-name">${employeeName}</td>`;
+                    dates.forEach(date => {
+                        const dateString = formatDateToYYYYMMDD(date); 
+                        let cellContent = '';
+                        let cellClass = '';
+                        let cellTitle = '';
+
+                        // Check if it's a public holiday for this specific cell
+                        const isPH = isPublicHoliday(dateString);
+                        if (isPH) {
+                            // Only increment if this employee is actually working (not on leave or extra pay)
+                            if (!employeeLeaveData[employeeName]?.[dateString] && !employeeExtraPayData[employeeName]?.[dateString]) {
+                                currentEmployeeShiftCounts[employeeName]['publicHolidays']++; 
+                            }
+                        }
+
+                        // Priority: Leave > Extra Pay > Regular Shift
+                        if (employeeLeaveData[employeeName] && employeeLeaveData[employeeName][dateString]) {
+                            const leaveType = employeeLeaveData[employeeName][dateString];
+                            let displayCode = '';
+                            switch (leaveType) {
+                                case 'annual leave': displayCode = 'AL'; break;
+                                case 'sick leave': displayCode = 'SL'; break;
+                                case 'family responsibility': displayCode = 'FRL'; break;
+                                case 'unpaid leave': displayCode = 'UL'; break;
+                                default: displayCode = 'L';
+                            }
+                            cellContent = displayCode;
+                            cellClass = `leave-cell leave-${leaveType.replace(/\s/g, '-')}`; 
+                            cellTitle = `Leave: ${leaveType.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}`; 
+                            currentEmployeeShiftCounts[employeeName][leaveType]++;
+
+                        } else if (employeeExtraPayData[employeeName] && employeeExtraPayData[employeeName][dateString]) {
+                            const extraPayType = employeeExtraPayData[employeeName][dateString];
+                            let displayCode = '';
+                            switch (extraPayType) {
+                                case 'day overtime': displayCode = 'DO'; break;
+                                case 'night overtime': displayCode = 'NO'; break;
+                                case 'public holiday day shift': displayCode = 'PHD'; break;
+                                case 'public holiday night shift': displayCode = 'PHN'; break;
+                                case 'one normal time and one o/t 2': displayCode = 'OT2'; break;
+                                case 'Day&Night': displayCode = 'D&N'; break;
+                                default: displayCode = 'EP';
+                            }
+                            cellContent = displayCode;
+                            cellClass = `extra-pay-cell extra-pay-${extraPayType.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase()}`;
+                            cellTitle = `Extra Pay: ${extraPayType.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ').replace('&', '&')}`;
+                            currentEmployeeShiftCounts[employeeName][extraPayType]++;
+                            if (extraPayType === 'Day&Night') {
+                                currentEmployeeShiftCounts[employeeName]['normalTime']++;
+                            }
+
+                        } else {
+                            // Regular shift
+                            const diffTime = Math.abs(date.getTime() - dates[0].getTime()); // Calculate relative to the first date of the roster
+                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                            const dayIndexInCycle = diffDays % 9;
+                            const shift = getShiftType(dayIndexInCycle);
+                            cellContent = shift;
+                            currentEmployeeShiftCounts[employeeName][shift]++;
+                            if (shift === 'D' || shift === 'N') {
+                                currentEmployeeShiftCounts[employeeName]['normalTime']++;
+                            }
+                        }
+
+                        const isSunday = date.getDay() === 0; // 0 is Sunday
+                        let cellDateClass = '';
+                        if (isSunday) {
+                            cellDateClass += ' sunday-column-cell';
+                        }
+                        if (isPH) {
+                            cellDateClass += ' public-holiday-column-cell';
+                        }
+                        tableHTML += `<td class="${cellClass} ${cellDateClass.trim()}" title="${cellTitle}">${cellContent}</td>`;
+                    });
+                    // Recalculate normal hours after all shifts for the employee are counted
+                    currentEmployeeShiftCounts[employeeName].normalHours = (currentEmployeeShiftCounts[employeeName].D + currentEmployeeShiftCounts[employeeName].N) * 12; 
+                    tableHTML += `</tr>`;
+                });
+
+                tableHTML += `</tbody></table>`;
+                return tableHTML;
+            }
+
+
+            /**
              * Generates the roster based on the input start date and employees.
              */
             function generateRoster() {
@@ -580,20 +799,21 @@
 
                 const startDateStr = startDateInput.value;
                 const endDateStr = endDateInput.value;
-                const employeesStr = employeesTextarea.value.trim();
+                const employeesA = employeesATextarea.value.trim().split('\n').map(name => name.trim()).filter(name => name !== '');
+                const employeesB = employeesBTextarea.value.trim().split('\n').map(name => name.trim()).filter(name => name !== '');
+                const employeesC = employeesCTextarea.value.trim().split('\n').map(name => name.trim()).filter(name => name !== '');
+
+                const allEmployees = [...employeesA, ...employeesB, ...employeesC];
 
                 if (!startDateStr || !endDateStr) {
                     showMessage('Please select both a start and an end date for the roster.', 'error');
                     return;
                 }
-                if (!employeesStr) {
-                    showMessage('Please enter employee names.', 'error');
+                if (allEmployees.length === 0) {
+                    showMessage('Please enter employee names for at least one shift.', 'error');
                     return;
                 }
 
-                const employees = employeesStr.split('\n').map(name => name.trim()).filter(name => name !== '');
-
-                // Use parseDateString to ensure local time interpretation
                 const startDate = parseDateString(startDateStr);
                 const endDate = parseDateString(endDateStr);
 
@@ -603,10 +823,10 @@
                 }
 
                 const dates = [];
-                let currentDate = new Date(startDate); // Create a new Date object to avoid modifying original startDate
+                let currentDate = new Date(startDate);
 
                 while (currentDate <= endDate) {
-                    dates.push(new Date(currentDate)); // Push a copy of the current date
+                    dates.push(new Date(currentDate));
                     currentDate.setDate(currentDate.getDate() + 1);
                 }
 
@@ -615,179 +835,88 @@
                     return;
                 }
 
-                // Array for short day names (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
-                const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-                let tableHTML = `<table class="roster-table"><thead>`;
-                
-                // First header row for "Employee Name" and Dates
-                tableHTML += `<tr><th class="employee-header" rowspan="2">Employee Name</th>`; // rowspan for employee header
-                dates.forEach(date => {
-                    // Check if the current date is a Sunday
-                    const isSunday = date.getDay() === 0; // 0 is Sunday
-                    const headerHighlightClass = isSunday ? ' sunday-column-header' : '';
-                    tableHTML += `<th class="${headerHighlightClass}">${date.getDate()}/${(date.getMonth() + 1).toString().padStart(2, '0')}</th>`;
-                });
-                tableHTML += `</tr>`;
-
-                // Second header row for Day of the Week
-                tableHTML += `<tr>`;
-                dates.forEach(date => {
-                    const isSunday = date.getDay() === 0; // 0 is Sunday
-                    const highlightClass = isSunday ? ' sunday-column-header' : ''; // Use header highlight for this row too
-                    tableHTML += `<th class="${highlightClass}">${dayNames[date.getDay()]}</th>`;
-                });
-                tableHTML += `</tr></thead><tbody>`;
-
                 // Reset employeeShiftCounts for fresh calculation
                 employeeLeaveCounts = {}; // Clear previous leave counts before recalculating
                 const currentEmployeeShiftCounts = {}; // Use a temporary object for this generation cycle
 
-                let totalSundaysInRosterPeriod = 0; // Initialize total Sundays for the period
-
-                // Calculate total Sundays in the roster period (this is constant for all employees)
-                dates.forEach(date => {
-                    if (date.getDay() === 0) { // 0 is Sunday
-                        totalSundaysInRosterPeriod++;
-                    }
-                });
-
-                console.log('DEBUG: Roster generation using employeeLeaveData:', JSON.stringify(employeeLeaveData));
-                console.log('DEBUG: Roster generation using employeeExtraPayData:', JSON.stringify(employeeExtraPayData));
-
-
-                // Add rows for each employee
-                employees.forEach((employeeName) => {
-                    // Initialize currentEmployeeShiftCounts for this employee
+                // Initialize counts for all employees across all shifts
+                allEmployees.forEach(employeeName => {
                     currentEmployeeShiftCounts[employeeName] = { 
                         D: 0, 
                         N: 0, 
                         O: 0, 
                         normalHours: 0,
-                        totalSundays: totalSundaysInRosterPeriod,
-                        sundayHoursTimeAndAHalf: totalSundaysInRosterPeriod * 18,
-                        'annual leave': 0, // Initialize leave counts
+                        totalSundays: 0, 
+                        sundayHoursTimeAndAHalf: 0,
+                        'annual leave': 0,
                         'sick leave': 0,
                         'family responsibility': 0,
                         'unpaid leave': 0,
-                        'normalTime': 0 // Initialize normalTime count
+                        'normalTime': 0,
+                        'publicHolidays': 0 
                     }; 
-                    // Initialize extra pay counts for each type to 0
                     ALL_EXTRA_PAY_TYPES.forEach(type => {
                         currentEmployeeShiftCounts[employeeName][type] = 0;
                     });
-
-                    tableHTML += `<tr><td class="employee-name">${employeeName}</td>`;
-                    dates.forEach(date => {
-                        // Use formatDateToYYYYMMDD for consistent string representation
-                        const dateString = formatDateToYYYYMMDD(date); 
-                        let cellContent = '';
-                        let cellClass = '';
-                        let cellTitle = '';
-
-                        // Priority: Leave > Extra Pay > Regular Shift
-                        if (employeeLeaveData[employeeName] && employeeLeaveData[employeeName][dateString]) {
-                            // This day is a leave day
-                            const leaveType = employeeLeaveData[employeeName][dateString];
-                            let displayCode = '';
-                            switch (leaveType) {
-                                case 'annual leave': displayCode = 'AL'; break;
-                                case 'sick leave': displayCode = 'SL'; break;
-                                case 'family responsibility': displayCode = 'FRL'; break;
-                                case 'unpaid leave': displayCode = 'UL'; break;
-                                default: displayCode = 'L'; // Generic Leave
-                            }
-                            cellContent = displayCode;
-                            // Ensure the class name matches the CSS definition
-                            cellClass = `leave-cell leave-${leaveType.replace(/\s/g, '-')}`; 
-                            cellTitle = `Leave: ${leaveType.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}`; 
-                            
-                            // Increment leave count for the employee in the summary data
-                            currentEmployeeShiftCounts[employeeName][leaveType]++;
-                            console.log(`DEBUG: Applying LEAVE for ${employeeName} on ${dateString}: Content='${cellContent}', Type='${leaveType}', Class='${cellClass}'`);
-
-                        } else if (employeeExtraPayData[employeeName] && employeeExtraPayData[employeeName][dateString]) {
-                            // This day is an extra pay day
-                            const extraPayType = employeeExtraPayData[employeeName][dateString];
-                            let displayCode = '';
-                            switch (extraPayType) {
-                                case 'day overtime': displayCode = 'DO'; break;
-                                case 'night overtime': displayCode = 'NO'; break;
-                                case 'public holiday day shift': displayCode = 'PHD'; break;
-                                case 'public holiday night shift': displayCode = 'PHN'; break;
-                                case 'one normal time and one o/t 2': displayCode = 'OT2'; break;
-                                case 'Day&Night': displayCode = 'D&N'; break; // New: Day&Night Extra Pay
-                                default: displayCode = 'EP'; // Generic Extra Pay
-                            }
-                            cellContent = displayCode;
-                            cellClass = `extra-pay-cell extra-pay-${extraPayType.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase()}`; /* Adjusted for special characters */
-                            cellTitle = `Extra Pay: ${extraPayType.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ').replace('&', '&')}`; /* Handle & for title */
-                            // Increment extra pay count for the employee in the summary data
-                            currentEmployeeShiftCounts[employeeName][extraPayType]++;
-                            // Also count towards normalTime if it's a 'Day', 'Night', or 'Day&Night' type
-                            if (extraPayType === 'Day&Night') {
-                                currentEmployeeShiftCounts[employeeName]['normalTime']++;
-                            }
-                            console.log(`DEBUG: Applying EXTRA PAY for ${employeeName} on ${dateString}: Content='${cellContent}', Type='${extraPayType}', Class='${cellClass}'`);
-
-                        } else {
-                            // If no leave or extra pay, determine the regular shift
-                            const diffTime = Math.abs(date.getTime() - startDate.getTime());
-                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                            const dayIndexInCycle = diffDays % 9;
-                            const shift = getShiftType(dayIndexInCycle);
-                            cellContent = shift;
-
-                            // Increment shift count for the employee, only if it's a regular shift
-                            currentEmployeeShiftCounts[employeeName][shift]++;
-                            // Count Day and Night shifts for normalTime
-                            if (shift === 'D' || shift === 'N') {
-                                currentEmployeeShiftCounts[employeeName]['normalTime']++;
-                            }
-                        }
-
-                        const isSunday = date.getDay() === 0; // 0 is Sunday
-                        const sundayClass = isSunday ? ' sunday-column-cell' : ''; // Apply cell highlight for data cells
-
-                        tableHTML += `<td class="${cellClass}${sundayClass}" title="${cellTitle}">${cellContent}</td>`;
-                        console.log(`DEBUG: Final Cell for ${employeeName} on ${dateString}: Content='${cellContent}', Class='${cellClass}${sundayClass}', Title='${cellTitle}'`);
-                    });
-                    // Calculate normal hours after all shifts for the employee are counted
-                    currentEmployeeShiftCounts[employeeName].normalHours = (currentEmployeeShiftCounts[employeeName].D + currentEmployeeShiftCounts[employeeName].N) * 12; // Only D and N count for normal hours
-                    tableHTML += `</tr>`;
                 });
 
-                tableHTML += `</tbody></table>`;
-                rosterOutputDiv.innerHTML = tableHTML;
+                let allRostersHTML = '';
+
+                // Generate roster for Shift A
+                if (employeesA.length > 0) {
+                    allRostersHTML += generateSingleRosterTable(employeesA, dates, currentEmployeeShiftCounts, "Shift A");
+                }
+                // Generate roster for Shift B
+                if (employeesB.length > 0) {
+                    allRostersHTML += generateSingleRosterTable(employeesB, dates, currentEmployeeShiftCounts, "Shift B");
+                }
+                // Generate roster for Shift C
+                if (employeesC.length > 0) {
+                    allRostersHTML += generateSingleRosterTable(employeesC, dates, currentEmployeeShiftCounts, "Shift C");
+                }
+
+                rosterOutputDiv.innerHTML = allRostersHTML;
                 rosterOutputDiv.classList.remove('hidden');
 
                 // Apply descriptions if already generated
                 applyShiftDescriptions();
 
                 // Generate and display summary table using currentEmployeeShiftCounts
-                let summaryHTML = `<table class="summary-table"><thead><tr><th>Employee Name</th><th>Normal Time</th><th>Total Day Shifts (D)</th><th>Total Night Shifts (N)</th><th>Total Off Days (O)</th><th>Normal Hours Total</th><th>Total Sundays</th><th>Sunday Hours Time and a Half</th><th>Annual Leave</th><th>Sick Leave</th><th>Family Responsibility</th><th>Unpaid Leave</th>`; // Moved Normal Time header
+                let summaryHTML = `<table class="summary-table"><thead><tr><th>Employee Name</th><th>Normal Time</th><th>Total Day Shifts (D)</th><th>Total Night Shifts (N)</th><th>Total Off Days (O)</th><th>Normal Hours Total</th><th>Total Sundays</th><th>Sunday Hours Time and a Half</th><th>Public Holidays</th><th>Annual Leave</th><th>Sick Leave</th><th>Family Responsibility</th><th>Unpaid Leave</th>`; 
                 
                 // Add Extra Pay Type headers dynamically
                 ALL_EXTRA_PAY_TYPES.forEach(type => {
-                    // Format type for display (e.g., "day overtime" -> "Day Overtime")
                     const formattedType = type.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ').replace('&', '&');
                     summaryHTML += `<th>${formattedType}</th>`;
                 });
                 summaryHTML += `</tr></thead><tbody>`;
 
-                for (const employeeName in currentEmployeeShiftCounts) {
+                for (const employeeName of allEmployees) { 
                     const counts = currentEmployeeShiftCounts[employeeName];
-                    summaryHTML += `<tr><td>${employeeName}</td><td>${counts['normalTime']}</td><td>${counts.D}</td><td>${counts.N}</td><td>${counts.O}</td><td>${counts.normalHours}</td><td>${counts.totalSundays}</td><td>${counts.sundayHoursTimeAndAHalf}</td><td>${counts['annual leave']}</td><td>${counts['sick leave']}</td><td>${counts['family responsibility']}</td><td>${counts['unpaid leave']}</td>`; // Moved Normal Time data
+                    // Recalculate total Sundays and Sunday hours for summary based on actual shifts assigned
+                    let employeeSundays = 0;
+                    dates.forEach(date => {
+                        const dateString = formatDateToYYYYMMDD(date);
+                        if (date.getDay() === 0 && !employeeLeaveData[employeeName]?.[dateString] && !employeeExtraPayData[employeeName]?.[dateString]) {
+                            // Only count as a Sunday if it's a regular shift day for the employee
+                            employeeSundays++;
+                        }
+                    });
+                    counts.totalSundays = employeeSundays;
+                    counts.sundayHoursTimeAndAHalf = employeeSundays * 18;
+
+
+                    summaryHTML += `<tr><td>${employeeName}</td><td>${counts['normalTime']}</td><td>${counts.D}</td><td>${counts.N}</td><td>${counts.O}</td><td>${counts.normalHours}</td><td>${counts.totalSundays}</td><td>${counts.sundayHoursTimeAndAHalf}</td><td>${counts['publicHolidays']}</td><td>${counts['annual leave']}</td><td>${counts['sick leave']}</td><td>${counts['family responsibility']}</td><td>${counts['unpaid leave']}</td>`; 
                     
                     // Add Extra Pay Type counts dynamically
                     ALL_EXTRA_PAY_TYPES.forEach(type => {
-                        summaryHTML += `<td>${counts[type] || 0}</td>`; // Display count, default to 0 if not present
+                        summaryHTML += `<td>${counts[type] || 0}</td>`;
                     });
                     summaryHTML += `</tr>`;
                 }
                 summaryHTML += `</tbody></table>`;
                 summaryTableContainer.innerHTML = summaryHTML;
-                rosterSummaryDiv.classList.remove('hidden'); // Show the summary div
+                rosterSummaryDiv.classList.remove('hidden');
 
                 showMessage('Roster generated successfully!', 'success');
                 populateEmployeeDropdowns(); // Populate both employee dropdowns after roster generation
@@ -806,7 +935,9 @@
                 // Set date inputs to blank
                 startDateInput.value = '';
                 endDateInput.value = '';
-                employeesTextarea.value = '';
+                employeesATextarea.value = ''; // Clear all three textareas
+                employeesBTextarea.value = '';
+                employeesCTextarea.value = '';
                 shiftDescriptions = null; // Clear cached descriptions
                 employeeLeaveData = {}; // Clear leave data
                 employeeLeaveCounts = {}; // Clear leave counts
@@ -827,64 +958,79 @@
              * Exports the generated roster table to a CSV file.
              */
             function exportRosterToCSV() {
-                const table = rosterOutputDiv.querySelector('table');
-                if (!table) {
+                const tables = rosterOutputDiv.querySelectorAll('table');
+                if (tables.length === 0) {
                     showMessage('No roster generated yet to export!', 'error');
                     return;
                 }
 
                 let csv = [];
-                const rows = table.querySelectorAll('tr');
 
-                // Manually construct CSV to include both header rows
-                const headerRow1 = [];
-                const headerRow2 = [];
+                tables.forEach(table => {
+                    // Add a blank line to separate tables in CSV
+                    if (csv.length > 0) {
+                        csv.push(''); 
+                    }
 
-                // Get headers from the first two rows of the table
-                const headerCells1 = rows[0].querySelectorAll('th');
-                const headerCells2 = rows[1].querySelectorAll('th');
+                    // Add shift name header if available (from the h3 tag before the table)
+                    const prevSibling = table.previousElementSibling;
+                    if (prevSibling && prevSibling.tagName === 'H3') {
+                        csv.push(`"${prevSibling.textContent.trim()}"`);
+                    }
 
-                // First header row (Employee Name and Dates)
-                headerCells1.forEach((cell, index) => {
-                    let text = cell.innerText.trim();
-                    if (index === 0) { // Employee Name cell
-                        headerRow1.push(text);
-                        headerRow2.push(''); // Empty cell for day of week under Employee Name
-                    } else {
+                    const rows = table.querySelectorAll('tr');
+
+                    // Manually construct CSV to include both header rows
+                    const headerRow1 = [];
+                    const headerRow2 = [];
+
+                    // Get headers from the first two rows of the table
+                    const headerCells1 = rows[0].querySelectorAll('th');
+                    const headerCells2 = rows[1].querySelectorAll('th');
+
+                    // First header row (Employee Name and Dates)
+                    headerCells1.forEach((cell, index) => {
+                        let text = cell.innerText.trim();
+                        if (index === 0) { // Employee Name cell
+                            headerRow1.push(text);
+                            headerRow2.push(''); // Empty cell for day of week under Employee Name
+                        } else {
+                            if (text.includes(',')) text = `"${text.replace(/"/g, '""')}"`;
+                            headerRow1.push(text);
+                        }
+                    });
+                    csv.push(headerRow1.join(','));
+
+                    // Second header row (Day of the Week)
+                    headerCells2.forEach(cell => {
+                        let text = cell.innerText.trim();
                         if (text.includes(',')) text = `"${text.replace(/"/g, '""')}"`;
-                        headerRow1.push(text);
+                        headerRow2.push(text);
+                    });
+                    csv.push(headerRow2.join(','));
+
+
+                    // Iterate over data rows (starting from index 2, as 0 and 1 are headers)
+                    for (let i = 2; i < rows.length; i++) {
+                        const row = rows[i];
+                        const cols = row.querySelectorAll('td');
+                        const rowData = [];
+                        cols.forEach(col => {
+                            let text = col.innerText.trim();
+                            // If the cell has a title (meaning it's a leave or extra pay day), use the title for CSV
+                            const title = col.getAttribute('title');
+                            if (title && (title.startsWith('Leave: ') || title.startsWith('Extra Pay: '))) {
+                                text = title.replace('Leave: ', '').replace('Extra Pay: ', ''); // Use the full type for CSV
+                            }
+                            if (text.includes(',')) {
+                                text = `"${text.replace(/"/g, '""')}"`;
+                            }
+                            rowData.push(text);
+                        });
+                        csv.push(rowData.join(','));
                     }
                 });
-                csv.push(headerRow1.join(','));
 
-                // Second header row (Day of the Week)
-                headerCells2.forEach(cell => {
-                    let text = cell.innerText.trim();
-                    if (text.includes(',')) text = `"${text.replace(/"/g, '""')}"`;
-                    headerRow2.push(text);
-                });
-                csv.push(headerRow2.join(','));
-
-
-                // Iterate over data rows (starting from index 2, as 0 and 1 are headers)
-                for (let i = 2; i < rows.length; i++) {
-                    const row = rows[i];
-                    const cols = row.querySelectorAll('td');
-                    const rowData = [];
-                    cols.forEach(col => {
-                        let text = col.innerText.trim();
-                        // If the cell has a title (meaning it's a leave or extra pay day), use the title for CSV
-                        const title = col.getAttribute('title');
-                        if (title && (title.startsWith('Leave: ') || title.startsWith('Extra Pay: '))) {
-                            text = title.replace('Leave: ', '').replace('Extra Pay: ', ''); // Use the full type for CSV
-                        }
-                        if (text.includes(',')) {
-                            text = `"${text.replace(/"/g, '""')}"`;
-                        }
-                        rowData.push(text);
-                    });
-                    csv.push(rowData.join(','));
-                }
 
                 // Add summary data to CSV
                 const summaryTable = summaryTableContainer.querySelector('table');
@@ -1081,11 +1227,13 @@
              * @param {string} selectedValue - The value to pre-select.
              */
             function populateEmployeeDropdownInSingleSelect(selectElement, selectedValue = '') {
-                const employeeNamesText = employeesTextarea.value.trim();
-                const employeeNames = employeeNamesText.split('\n').map(name => name.trim()).filter(name => name !== '');
+                const employeesA = employeesATextarea.value.trim().split('\n').map(name => name.trim()).filter(name => name !== '');
+                const employeesB = employeesBTextarea.value.trim().split('\n').map(name => name.trim()).filter(name => name !== '');
+                const employeesC = employeesCTextarea.value.trim().split('\n').map(name => name.trim()).filter(name => name !== '');
+                const allEmployees = [...employeesA, ...employeesB, ...employeesC];
 
                 selectElement.innerHTML = '<option value="">-- Select an Employee --</option>';
-                employeeNames.forEach(name => {
+                allEmployees.forEach(name => {
                     const option = document.createElement('option');
                     option.value = name;
                     option.textContent = name;
@@ -1101,8 +1249,6 @@
              * Populates all employee dropdowns (initial and dynamic).
              */
             function populateEmployeeDropdowns() {
-                // Populate initial dropdowns (if any, though we replaced them with dynamic rows)
-                // This function is now mainly for populating dropdowns in newly added dynamic rows
                 document.querySelectorAll('#leaveInputsContainer .employee-select').forEach(select => {
                     populateEmployeeDropdownInSingleSelect(select, select.value); // Re-populate, keeping current selection
                 });
@@ -1116,7 +1262,8 @@
              */
             function applyAllLeaveEntries() {
                 let anyApplied = false;
-                let hasOverallError = false; // Declare hasOverallError here
+                let hasOverallError = false; 
+                let errorMessages = []; // Initialize errorMessages here
 
                 // Create a temporary object to hold all new valid leave data
                 const tempEmployeeLeaveData = {};
@@ -1127,52 +1274,51 @@
                     return;
                 }
 
-                for (const row of leaveRows) { // Use for...of to allow 'continue'
+                for (const row of leaveRows) { 
                     const employeeSelect = row.querySelector('.employee-select');
                     const leaveTypeSelect = row.querySelector('.leave-type-select');
                     const leaveDateInput = row.querySelector('.leave-date-input');
 
                     const selectedEmployee = employeeSelect.value;
                     const selectedLeaveType = leaveTypeSelect.value;
-                    const selectedDateStr = leaveDateInput.value; // Get the string directly
+                    const selectedDateStr = leaveDateInput.value; 
 
                     if (!selectedEmployee || selectedEmployee === "" || !selectedLeaveType || selectedLeaveType === "" || !selectedDateStr) {
-                        showMessage('Please fill all fields in each leave entry row.', 'error');
+                        errorMessages.push('Please fill all fields in each leave entry row.');
                         hasOverallError = true;
-                        continue; // Skip this row and move to the next
+                        continue; 
                     }
 
                     const rosterStartDate = parseDateString(startDateInput.value);
                     const rosterEndDate = parseDateString(endDateInput.value);
-                    const leaveDate = parseDateString(selectedDateStr); // Parse the string to a Date object
+                    const leaveDate = parseDateString(selectedDateStr); 
 
                     if (leaveDate < rosterStartDate || leaveDate > rosterEndDate) {
-                        showMessage(`Leave date ${selectedDateStr} for ${selectedEmployee} is outside the roster period.`, 'error');
+                        errorMessages.push(`Leave date ${selectedDateStr} for ${selectedEmployee} is outside the roster period.`);
                         hasOverallError = true;
-                        continue; // Skip this row and move to the next
+                        continue; 
                     }
 
                     if (!tempEmployeeLeaveData[selectedEmployee]) {
                         tempEmployeeLeaveData[selectedEmployee] = {};
                     }
-                    tempEmployeeLeaveData[selectedEmployee][selectedDateStr] = selectedLeaveType; // Store the original string
+                    tempEmployeeLeaveData[selectedEmployee][selectedDateStr] = selectedLeaveType; 
                     anyApplied = true;
                 }
 
-                if (hasOverallError && !anyApplied) {
-                    showMessage('No leave entries could be applied due to missing information or invalid dates.', 'error');
+                if (hasOverallError && errorMessages.length > 0) { 
+                    showMessage(`Some leave entries could not be applied: ${errorMessages.join('; ')}`, 'error');
                     return;
                 }
 
-                // Replace the global data with the collected valid data
                 employeeLeaveData = tempEmployeeLeaveData;
                 console.log('DEBUG: employeeLeaveData after applying all:', JSON.stringify(employeeLeaveData));
 
 
                 if (anyApplied) {
                     showMessage('All valid leave entries applied. Roster updated.', 'success');
-                    generateRoster(); // Regenerate roster to reflect all changes
-                } else if (!hasOverallError) { // Only show info if no errors and nothing applied
+                    generateRoster(); 
+                } else if (!hasOverallError) { 
                     showMessage('No new valid leave entries were found to apply.', 'info');
                 }
             }
@@ -1422,7 +1568,11 @@
             clearRosterBtn.addEventListener('click', clearRoster);
 
             // Event Listeners for Leave Management
-            employeesTextarea.addEventListener('input', populateEmployeeDropdowns); // Populate dropdowns when employee names change
+            // Listen to all three textareas for input to populate dropdowns
+            employeesATextarea.addEventListener('input', populateEmployeeDropdowns); 
+            employeesBTextarea.addEventListener('input', populateEmployeeDropdowns);
+            employeesCTextarea.addEventListener('input', populateEmployeeDropdowns);
+
             addLeaveEntryBtn.addEventListener('click', () => createLeaveInputRow()); // Add a new blank row
             applyAllLeaveBtn.addEventListener('click', applyAllLeaveEntries); // Apply all entries
 
