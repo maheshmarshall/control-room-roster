@@ -229,7 +229,8 @@
         .summary-table td:nth-last-child(8),
         .summary-table td:nth-last-child(9),
         .summary-table td:nth-last-child(10), /* Added for 'normal time' */
-        .summary-table td:nth-last-child(11) { /* Added for 'Day&Night' */
+        .summary-table td:nth-last-child(11), /* Added for 'Day&Night' */
+        .summary-table td:nth-last-child(12) { /* Added for 'Night Shift (Total)' */
             text-align: center;
             font-weight: 500;
         }
@@ -278,8 +279,11 @@
             background-color: #ec4899; /* Pink for OT2 (Tailwind pink-500) */
         }
         /* New extra pay types */
-        .extra-pay-day-night { /* Combined Day&Night */
-            background-color: #a855f7; /* Violet for Day&Night (Tailwind violet-500) */
+        .extra-pay-night-to-day { /* Changed from Day&Night */
+            background-color: #a855f7; /* Violet for Night to Day (Tailwind violet-500) */
+        }
+        .extra-pay-day-to-night { /* New: Day to Night */
+            background-color: #f9a8d4; /* Light pink for Day to Night */
         }
 
         /* Dynamic row styling */
@@ -432,7 +436,8 @@
             'public holiday day shift',
             'public holiday night shift',
             'one normal time and one o/t 2',
-            'Day&Night' // Modified extra pay type
+            'night to day', // Changed from 'Day&Night'
+            'day to night' // Added new extra pay type
         ];
 
         // Define all possible leave types
@@ -734,6 +739,7 @@
                         currentEmployeeShiftCounts[employeeName] = { 
                             D: 0, N: 0, O: 0, normalHours: 0,
                             totalSundays: 0, sundayHoursTimeAndAHalf: 0,
+                            sundayNightShifts: 0, // New counter for nights on Sunday
                             // Initialize all leave types
                             'annual leave': 0, 'sick leave': 0, 'family responsibility': 0, 'unpaid leave': 0,
                             // Initialize all extra pay types
@@ -762,7 +768,14 @@
                         // Check for Extra Pay (Extra pay overrides normal shift display if present)
                         else if (employeeExtraPayData[employeeName] && employeeExtraPayData[employeeName][dateString]) {
                             const extraPayType = employeeExtraPayData[employeeName][dateString];
-                            cellContent = extraPayType.toUpperCase().split(' ').map(word => word[0]).join(''); // Abbreviate extra pay type
+                            // Special handling for 'night to day' and 'day to night' display
+                            if (extraPayType === 'night to day') {
+                                cellContent = 'N-D'; // Display N-D for Night to Day
+                            } else if (extraPayType === 'day to night') {
+                                cellContent = 'D-N'; // Display D-N for Day to Night
+                            } else {
+                                cellContent = extraPayType.toUpperCase().split(' ').map(word => word[0]).join(''); // Abbreviate other extra pay types
+                            }
                             cellClass = `extra-pay-cell extra-pay-${extraPayType.toLowerCase().replace(/ /g, '-')}`;
                             currentEmployeeShiftCounts[employeeName][extraPayType]++; // Increment count for this extra pay type
                             isShiftAssigned = false;
@@ -783,6 +796,9 @@
                                 if (isSunday) {
                                     currentEmployeeShiftCounts[employeeName].totalSundays++;
                                     currentEmployeeShiftCounts[employeeName].sundayHoursTimeAndAHalf += 8; // 8 hours at time and a half
+                                    if (shiftType === 'N') { // Track nights on Sunday
+                                        currentEmployeeShiftCounts[employeeName].sundayNightShifts++;
+                                    }
                                 }
                             }
                             // Apply Sunday/Public Holiday highlighting to the shift cell
@@ -912,13 +928,27 @@
 
                 // Add Extra Pay Type headers
                 ALL_EXTRA_PAY_TYPES.forEach(extraPayType => {
-                    summaryHTML += `<th>${extraPayType.split(' ').map(word => word[0].toUpperCase() + word.slice(1)).join(' ')}</th>`;
+                    // Display "Night to Day" as "Night to Day" in header
+                    const headerText = extraPayType === 'night to day' ? 'Night to Day' :
+                                       extraPayType === 'day to night' ? 'Day to Night' :
+                                       extraPayType.split(' ').map(word => word[0].toUpperCase() + word.slice(1)).join(' ');
+                    summaryHTML += `<th>${headerText}</th>`;
                 });
+
+                // New Night Shift Total Column
+                summaryHTML += `<th>Night Shift (Total)</th>`;
 
                 summaryHTML += `</tr></thead><tbody>`;
 
                 for (const employeeName in employeeShiftData) {
                     const data = employeeShiftData[employeeName];
+                    
+                    // Calculate total night shifts (corrected calculation)
+                    const totalNightShifts = (data.N || 0) + 
+                                             (data['night overtime'] || 0) + 
+                                             (data['night to day'] || 0) +
+                                             (data['day to night'] || 0);
+
                     summaryHTML += `<tr>`;
                     summaryHTML += `<td>${employeeName}</td>`;
                     summaryHTML += `<td>${data.D || 0}</td>`;
@@ -937,6 +967,9 @@
                     ALL_EXTRA_PAY_TYPES.forEach(extraPayType => {
                         summaryHTML += `<td>${data[extraPayType] || 0}</td>`;
                     });
+
+                    // Add total night shifts
+                    summaryHTML += `<td>${totalNightShifts}</td>`;
 
                     summaryHTML += `</tr>`;
                 }
@@ -1158,7 +1191,8 @@
                             <option value="public holiday day shift">Public Holiday Day Shift</option>
                             <option value="public holiday night shift">Public Holiday Night Shift</option>
                             <option value="one normal time and one o/t 2">One Normal Time & One O/T 2</option>
-                            <option value="Day&Night">Day & Night</option>
+                            <option value="night to day">Night to Day</option> <!-- Changed text and value -->
+                            <option value="day to night">Day to Night</option> <!-- Added new option -->
                         </select>
                     </div>
                     <button type="button" class="remove-btn">Remove</button>
@@ -1361,6 +1395,7 @@
                             tempEmployeeShiftCounts[employeeName] = { 
                                 D: 0, N: 0, O: 0, normalHours: 0,
                                 totalSundays: 0, sundayHoursTimeAndAHalf: 0,
+                                sundayNightShifts: 0, // New counter for nights on Sunday
                                 ...Object.fromEntries(ALL_LEAVE_TYPES.map(type => [type, 0])),
                                 ...Object.fromEntries(ALL_EXTRA_PAY_TYPES.map(type => [type, 0]))
                             };
@@ -1399,6 +1434,9 @@
                                     if (isSunday) {
                                         tempEmployeeShiftCounts[employeeName].totalSundays++;
                                         tempEmployeeShiftCounts[employeeName].sundayHoursTimeAndAHalf += 8;
+                                        if (shiftType === 'N') { // Track nights on Sunday for CSV export
+                                            tempEmployeeShiftCounts[employeeName].sundayNightShifts++;
+                                        }
                                     }
                                 }
                             }
@@ -1452,7 +1490,14 @@
                         // Check for Extra Pay
                         else if (employeeExtraPayData[employeeName] && employeeExtraPayData[employeeName][dateString]) {
                             const extraPayType = employeeExtraPayData[employeeName][dateString];
-                            cellContent = extraPayType.toUpperCase().split(' ').map(word => word[0]).join(''); // Abbreviate extra pay type
+                            // Special handling for 'night to day' and 'day to night' display
+                            if (extraPayType === 'night to day') {
+                                cellContent = 'N-D'; // Display N-D for Night to Day
+                            } else if (extraPayType === 'day to night') {
+                                cellContent = 'D-N'; // Display D-N for Day to Night
+                            } else {
+                                cellContent = extraPayType.toUpperCase().split(' ').map(word => word[0]).join(''); // Abbreviate other extra pay types
+                            }
                             isShiftAssigned = false;
                         }
 
@@ -1475,14 +1520,28 @@
                     summaryHeaders.push(`${leaveType.split(' ').map(word => word[0].toUpperCase() + word.slice(1)).join(' ')} Days`);
                 });
                 ALL_EXTRA_PAY_TYPES.forEach(extraPayType => {
-                    summaryHeaders.push(`${extraPayType.split(' ').map(word => word[0].toUpperCase() + word.slice(1)).join(' ')}`);
+                     // Display "Night to Day" as "Night to Day" in header for CSV
+                    const headerText = extraPayType === 'night to day' ? 'Night to Day' :
+                                       extraPayType === 'day to night' ? 'Day to Night' :
+                                       extraPayType.split(' ').map(word => word[0].toUpperCase() + word.slice(1)).join(' ');
+                    summaryHeaders.push(headerText);
                 });
+                // New Night Shift Total Column header for CSV
+                summaryHeaders.push("Night Shift (Total)");
+
                 csvContent += summaryHeaders.join(",") + "\n";
 
                 // Summary Table Data
                 for (const employeeName in tempEmployeeShiftCounts) {
                     const data = tempEmployeeShiftCounts[employeeName];
-                    const rowData = [ // Declare rowData here
+                    
+                    // Calculate total night shifts for CSV (corrected calculation)
+                    const totalNightShiftsForCsv = (data.N || 0) + 
+                                                   (data['night overtime'] || 0) + 
+                                                   (data['night to day'] || 0) +
+                                                   (data['day to night'] || 0);
+
+                    const rowData = [ 
                         employeeName,
                         data.D || 0,
                         data.N || 0,
@@ -1497,6 +1556,9 @@
                     ALL_EXTRA_PAY_TYPES.forEach(extraPayType => {
                         rowData.push(data[extraPayType] || 0);
                     });
+                    // Add total night shifts to CSV row
+                    rowData.push(totalNightShiftsForCsv);
+
                     csvContent += rowData.join(",") + "\n";
                 }
 
