@@ -219,23 +219,7 @@
             background-color: #e0f2fe;
         }
         /* Center calculation columns */
-        .summary-table td:last-child,
-        .summary-table td:nth-last-child(2),
-        .summary-table td:nth-last-child(3),
-        .summary-table td:nth-last-child(4),
-        .summary-table td:nth-last-child(5), /* New: Extra Pay columns */
-        .summary-table td:nth-last-child(6),
-        .summary-table td:nth-last-child(7),
-        .summary-table td:nth-last-child(8),
-        .summary-table td:nth-last-child(9),
-        .summary-table td:nth-last-child(10), /* Added for 'normal time' */
-        .summary-table td:nth-last-child(11), /* Added for 'Normal Hours' */
-        .summary-table td:nth-last-child(12), /* Added for 'Night Shift (Total)' */
-        .summary-table td:nth-last-child(13), /* Added for 'Day&Night' */
-        .summary-table td:nth-last-child(14), /* Added for 'Sunday Night' */
-        .summary-table td:nth-last-child(15), /* Added for 'Sunday Day' */
-        .summary-table td:nth-last-child(16), /* Added for 'Sunday Hours' Time and a half' */
-        .summary-table td:nth-last-child(17) { /* Added for 'Sundays Worked' */
+        .summary-table td:not(:first-child) { /* Center all columns except the first (Employee Name) */
             text-align: center;
             font-weight: 500;
         }
@@ -969,6 +953,8 @@
                 summaryHTML += `<th>Night Shift (Total)</th>`; // Existing column
                 summaryHTML += `<th>Day & Night</th>`; // Existing column (for Night to Day extra pay)
                 
+                // New C/R Total Shifts Worked column
+                summaryHTML += `<th>C/R (Total no. of shifts worked)</th>`;
 
                 // Add headers for all leave types
                 ALL_LEAVE_TYPES.forEach(leaveType => {
@@ -989,6 +975,16 @@
                     const sundaysWorked = counts['sundays worked'] || 0; // Get Sundays Worked count
                     const sundayHoursTimeAndAHalf = sundaysWorked * 18; // Calculate Sunday Hours' Time and a half
 
+                    // Calculate C/R (Total no. of shifts worked)
+                    const crTotalShiftsWorked = 
+                        (counts['public holiday day shift'] || 0) +
+                        (counts['public holiday night shift'] || 0) +
+                        (counts['day overtime'] || 0) +
+                        (counts['night overtime'] || 0) +
+                        (counts['sunday day'] || 0) +
+                        (counts['sunday night'] || 0);
+
+
                     summaryHTML += `<tr><td>${employee}</td>`;
                     summaryHTML += `<td>${counts['D'] || 0}</td>`;
                     summaryHTML += `<td>${counts['N'] || 0}</td>`;
@@ -1006,6 +1002,8 @@
                     summaryHTML += `<td>${counts['night shift total'] || 0}</td>`; // Display night shift total
                     summaryHTML += `<td>${counts['night to day'] || 0}</td>`; // Display 'Night to Day' (from extra pay)
                     
+                    // Display C/R Total Shifts Worked
+                    summaryHTML += `<td>${crTotalShiftsWorked}</td>`;
 
                     // Display counts for all leave types
                     ALL_LEAVE_TYPES.forEach(leaveType => {
@@ -1136,6 +1134,33 @@
             }
 
             /**
+             * Gathers all unique employee names from the shift text areas.
+             * @returns {Array<string>} A sorted array of unique employee names.
+             */
+            function getAllEmployees() {
+                const employeesA = employeesATextarea.value.split('\n').map(name => name.trim()).filter(name => name);
+                const employeesB = employeesBTextarea.value.split('\n').map(name => name.trim()).filter(name => name);
+                const employeesC = employeesCTextarea.value.split('\n').map(name => name.trim()).filter(name => name);
+                const allEmployees = [...new Set([...employeesA, ...employeesB, ...employeesC])];
+                return allEmployees.sort(); // Sort alphabetically
+            }
+
+            /**
+             * Populates a select element with employee names.
+             * @param {HTMLSelectElement} selectElement - The select element to populate.
+             */
+            function populateEmployeeSelect(selectElement) {
+                const employees = getAllEmployees();
+                selectElement.innerHTML = '<option value="">Select Employee</option>'; // Default option
+                employees.forEach(employee => {
+                    const option = document.createElement('option');
+                    option.value = employee;
+                    option.textContent = employee;
+                    selectElement.appendChild(option);
+                });
+            }
+
+            /**
              * Adds a new dynamic row for leave input.
              */
             function addLeaveEntryRow() {
@@ -1144,7 +1169,7 @@
                 newRow.innerHTML = `
                     <div class="input-group">
                         <label>Employee Name:</label>
-                        <input type="text" class="form-input employee-name-input" placeholder="e.g., John Doe">
+                        <select class="form-select employee-name-select"></select> <!-- Changed to select -->
                     </div>
                     <div class="input-group">
                         <label>Leave Type:</label>
@@ -1163,6 +1188,10 @@
                     <button type="button" class="remove-btn">Remove</button>
                 `;
                 leaveInputsContainer.appendChild(newRow);
+
+                // Populate the new employee select dropdown
+                const employeeSelect = newRow.querySelector('.employee-name-select');
+                populateEmployeeSelect(employeeSelect);
 
                 // Add event listener to remove button
                 newRow.querySelector('.remove-btn').addEventListener('click', () => {
@@ -1185,7 +1214,7 @@
                 let hasErrors = false;
 
                 leaveRows.forEach(row => {
-                    const employeeName = row.querySelector('.employee-name-input').value.trim();
+                    const employeeName = row.querySelector('.employee-name-select').value.trim(); // Changed to select
                     const leaveType = row.querySelector('.leave-type-select').value;
                     const leaveDate = row.querySelector('.leave-date-input').value;
 
@@ -1195,12 +1224,8 @@
                         return;
                     }
 
-                    // Check if employee exists in any shift
-                    const allEmployees = [
-                        ...employeesATextarea.value.split('\n').map(name => name.trim()).filter(name => name),
-                        ...employeesBTextarea.value.split('\n').map(name => name.trim()).filter(name => name),
-                        ...employeesCTextarea.value.split('\n').map(name => name.trim()).filter(name => name)
-                    ];
+                    // Check if employee exists in any shift (redundant if using dropdown, but good for validation)
+                    const allEmployees = getAllEmployees();
                     if (!allEmployees.includes(employeeName)) {
                         showMessage(`Employee "${employeeName}" not found in any shift. Please check the name.`, 'error');
                         hasErrors = true;
@@ -1265,7 +1290,7 @@
                 newRow.innerHTML = `
                     <div class="input-group">
                         <label>Employee Name:</label>
-                        <input type="text" class="form-input employee-name-input" placeholder="e.g., Jane Doe">
+                        <select class="form-select employee-name-select"></select> <!-- Changed to select -->
                     </div>
                     <div class="input-group">
                         <label>Extra Pay Type:</label>
@@ -1288,6 +1313,10 @@
                 `;
                 extraPayInputsContainer.appendChild(newRow);
 
+                // Populate the new employee select dropdown
+                const employeeSelect = newRow.querySelector('.employee-name-select');
+                populateEmployeeSelect(employeeSelect);
+
                 // Add event listener to remove button
                 newRow.querySelector('.remove-btn').addEventListener('click', () => {
                     newRow.remove();
@@ -1308,7 +1337,7 @@
                 let hasErrors = false;
 
                 extraPayRows.forEach(row => {
-                    const employeeName = row.querySelector('.employee-name-input').value.trim();
+                    const employeeName = row.querySelector('.employee-name-select').value.trim(); // Changed to select
                     const extraPayType = row.querySelector('.extra-pay-type-select').value;
                     const extraPayDate = row.querySelector('.extra-pay-date-input').value;
 
@@ -1318,12 +1347,8 @@
                         return;
                     }
 
-                    // Check if employee exists in any shift
-                    const allEmployees = [
-                        ...employeesATextarea.value.split('\n').map(name => name.trim()).filter(name => name),
-                        ...employeesBTextarea.value.split('\n').map(name => name.trim()).filter(name => name),
-                        ...employeesCTextarea.value.split('\n').map(name => name.trim()).filter(name => name)
-                    ];
+                    // Check if employee exists in any shift (redundant if using dropdown, but good for validation)
+                    const allEmployees = getAllEmployees();
                     if (!allEmployees.includes(employeeName)) {
                         showMessage(`Employee "${employeeName}" not found in any shift. Please check the name.`, 'error');
                         hasErrors = true;
@@ -1452,6 +1477,18 @@
             applyAllLeaveBtn.addEventListener('click', applyAllLeave);
             addExtraPayEntryBtn.addEventListener('click', addExtraPayEntryRow);
             applyAllExtraPayBtn.addEventListener('click', applyAllExtraPay);
+
+            // Event listeners to update employee dropdowns when main employee lists change
+            employeesATextarea.addEventListener('input', () => {
+                document.querySelectorAll('.employee-name-select').forEach(select => populateEmployeeSelect(select));
+            });
+            employeesBTextarea.addEventListener('input', () => {
+                document.querySelectorAll('.employee-name-select').forEach(select => populateEmployeeSelect(select));
+            });
+            employeesCTextarea.addEventListener('input', () => {
+                document.querySelectorAll('.employee-name-select').forEach(select => populateEmployeeSelect(select));
+            });
+
 
             // Initial state adjustments
             exportCsvBtn.classList.add('hidden');
