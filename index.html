@@ -229,10 +229,13 @@
         .summary-table td:nth-last-child(8),
         .summary-table td:nth-last-child(9),
         .summary-table td:nth-last-child(10), /* Added for 'normal time' */
-        .summary-table td:nth-last-child(11), /* Added for 'Day&Night' */
+        .summary-table td:nth-last-child(11), /* Added for 'Normal Hours' */
         .summary-table td:nth-last-child(12), /* Added for 'Night Shift (Total)' */
-        .summary-table td:nth-last-child(13), /* Added for 'Sunday Night' */
-        .summary-table td:nth-last-child(14) { /* Added for 'Sunday Day' */
+        .summary-table td:nth-last-child(13), /* Added for 'Day&Night' */
+        .summary-table td:nth-last-child(14), /* Added for 'Sunday Night' */
+        .summary-table td:nth-last-child(15), /* Added for 'Sunday Day' */
+        .summary-table td:nth-last-child(16), /* Added for 'Sunday Hours' Time and a half' */
+        .summary-table td:nth-last-child(17) { /* Added for 'Sundays Worked' */
             text-align: center;
             font-weight: 500;
         }
@@ -790,10 +793,13 @@
                             'O': 0,
                             'Total Shifts': 0,
                             'normal time': 0, // New: normal time
+                            'normal hours': 0, // New: normal hours
                             'night shift total': 0, // New: night shift total
                             'day & night': 0, // New: day & night (for Night to Day)
                             'sunday day': 0, // New: Sunday Day count
-                            'sunday night': 0 // New: Sunday Night count
+                            'sunday night': 0, // New: Sunday Night count
+                            'sundays worked': 0, // New: Sundays Worked count
+                            'sunday hours time and a half': 0 // New: Sunday Hours' Time and a half
                         };
                         ALL_LEAVE_TYPES.forEach(leaveType => currentEmployeeShiftCounts[employee][leaveType] = 0);
                         ALL_EXTRA_PAY_TYPES.forEach(extraPayType => currentEmployeeShiftCounts[employee][extraPayType] = 0);
@@ -846,8 +852,10 @@
                             if (isSunday) {
                                 if (baseShiftType === 'D') {
                                     currentEmployeeShiftCounts[employee]['sunday day']++;
+                                    currentEmployeeShiftCounts[employee]['sundays worked']++; // Increment Sundays Worked
                                 } else if (baseShiftType === 'N') {
                                     currentEmployeeShiftCounts[employee]['sunday night']++;
+                                    currentEmployeeShiftCounts[employee]['sundays worked']++; // Increment Sundays Worked
                                 }
                             }
                         }
@@ -949,11 +957,18 @@
                 summaryHTML += `<th>Night Shifts (N)</th>`;
                 summaryHTML += `<th>Off Days (O)</th>`;
                 summaryHTML += `<th>Total Shifts</th>`;
-                summaryHTML += `<th>Normal Time</th>`; // New column
-                summaryHTML += `<th>Night Shift (Total)</th>`; // New column
-                summaryHTML += `<th>Day & Night</th>`; // New column (for Night to Day extra pay)
-                summaryHTML += `<th>Sunday Day</th>`; // New column
-                summaryHTML += `<th>Sunday Night</th>`; // New column
+                summaryHTML += `<th>Normal Time</th>`; // Existing column
+                summaryHTML += `<th>Normal Hours</th>`; // New column
+
+                // New Sunday columns, placed before Sunday Day/Night
+                summaryHTML += `<th>Sundays Worked</th>`; // New column
+                summaryHTML += `<th>Sunday Hours' Time and a half</th>`; // New column
+
+                summaryHTML += `<th>Sunday Day</th>`; // Existing column
+                summaryHTML += `<th>Sunday Night</th>`; // Existing column
+                summaryHTML += `<th>Night Shift (Total)</th>`; // Existing column
+                summaryHTML += `<th>Day & Night</th>`; // Existing column (for Night to Day extra pay)
+                
 
                 // Add headers for all leave types
                 ALL_LEAVE_TYPES.forEach(leaveType => {
@@ -969,16 +984,28 @@
 
                 for (const employee in allEmployeeShiftCounts) {
                     const counts = allEmployeeShiftCounts[employee];
+                    const normalTime = counts['normal time'] || 0;
+                    const normalHours = normalTime * 12; // Calculate Normal Hours
+                    const sundaysWorked = counts['sundays worked'] || 0; // Get Sundays Worked count
+                    const sundayHoursTimeAndAHalf = sundaysWorked * 18; // Calculate Sunday Hours' Time and a half
+
                     summaryHTML += `<tr><td>${employee}</td>`;
                     summaryHTML += `<td>${counts['D'] || 0}</td>`;
                     summaryHTML += `<td>${counts['N'] || 0}</td>`;
                     summaryHTML += `<td>${counts['O'] || 0}</td>`;
                     summaryHTML += `<td>${counts['Total Shifts'] || 0}</td>`;
-                    summaryHTML += `<td>${counts['normal time'] || 0}</td>`; // Display normal time
-                    summaryHTML += `<td>${counts['night shift total'] || 0}</td>`; // Display night shift total
-                    summaryHTML += `<td>${counts['night to day'] || 0}</td>`; // Display 'Night to Day' (from extra pay)
+                    summaryHTML += `<td>${normalTime}</td>`; // Display Normal Time
+                    summaryHTML += `<td>${normalHours}</td>`; // Display Normal Hours
+
+                    // Display new Sunday columns
+                    summaryHTML += `<td>${sundaysWorked}</td>`;
+                    summaryHTML += `<td>${sundayHoursTimeAndAHalf}</td>`;
+
                     summaryHTML += `<td>${counts['sunday day'] || 0}</td>`; // Display Sunday Day count
                     summaryHTML += `<td>${counts['sunday night'] || 0}</td>`; // Display Sunday Night count
+                    summaryHTML += `<td>${counts['night shift total'] || 0}</td>`; // Display night shift total
+                    summaryHTML += `<td>${counts['night to day'] || 0}</td>`; // Display 'Night to Day' (from extra pay)
+                    
 
                     // Display counts for all leave types
                     ALL_LEAVE_TYPES.forEach(leaveType => {
