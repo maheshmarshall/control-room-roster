@@ -230,7 +230,9 @@
         .summary-table td:nth-last-child(9),
         .summary-table td:nth-last-child(10), /* Added for 'normal time' */
         .summary-table td:nth-last-child(11), /* Added for 'Day&Night' */
-        .summary-table td:nth-last-child(12) { /* Added for 'Night Shift (Total)' */
+        .summary-table td:nth-last-child(12), /* Added for 'Night Shift (Total)' */
+        .summary-table td:nth-last-child(13), /* Added for 'Sunday Night' */
+        .summary-table td:nth-last-child(14) { /* Added for 'Sunday Day' */
             text-align: center;
             font-weight: 500;
         }
@@ -313,6 +315,18 @@
         .dynamic-input-row .remove-btn:hover {
             background-color: #dc2626; /* Darker red */
         }
+        /* Styling for LLM loading indicator */
+        .loading-indicator {
+            display: none; /* Hidden by default */
+            margin-top: 20px;
+            text-align: center;
+            font-size: 1.1rem;
+            color: #4f46e5;
+            font-weight: 600;
+        }
+        .loading-indicator.show {
+            display: block;
+        }
     </style>
 </head>
 <body class="selection:bg-indigo-300">
@@ -369,6 +383,8 @@
         </div>
 
         <div id="messageBox" class="message-box"></div>
+        <div id="loadingIndicator" class="loading-indicator">Generating insights...</div>
+
 
         <!-- Leave Management Section -->
         <div class="bg-white p-6 rounded-lg shadow-md">
@@ -504,6 +520,7 @@
             const clearRosterBtn = document.getElementById('clearRosterBtn');
             const rosterOutputDiv = document.getElementById('rosterOutput');
             const messageBox = document.getElementById('messageBox');
+            const loadingIndicator = document.getElementById('loadingIndicator'); // LLM loading indicator
             const rosterSummaryDiv = document.getElementById('rosterSummary');
             const summaryTableContainer = document.getElementById('summaryTableContainer');
 
@@ -695,129 +712,121 @@
                 let tableHTML = `<h3 class="text-xl font-semibold mb-2 mt-4 text-center">${shiftName} Roster</h3>`;
                 tableHTML += `<table class="roster-table"><thead>`;
                 
-                // First header row for "Employee Name" and Dates
-                tableHTML += `<tr><th class="employee-header" rowspan="2">Employee Name</th>`; // rowspan for employee header
+                // First header row for "Employee Name" and Dates (DD/MM)
+                tableHTML += `<tr><th class="sticky-header-corner">Employee Name</th>`;
                 dates.forEach(date => {
-                    // Check if the current date is a Sunday or Public Holiday
                     const dateString = formatDateToYYYYMMDD(date);
-                    const isSunday = date.getDay() === 0; // 0 is Sunday
-                    const isPH = isPublicHoliday(dateString);
-
-                    let headerHighlightClass = '';
+                    const isSunday = date.getDay() === 0; // Sunday is 0
+                    const isHoliday = isPublicHoliday(dateString);
+                    let headerClasses = '';
                     if (isSunday) {
-                        headerHighlightClass += ' sunday-column-header';
+                        headerClasses += ' sunday-column-header';
                     }
-                    if (isPH) {
-                        headerHighlightClass += ' public-holiday-column-header';
+                    if (isHoliday) {
+                        headerClasses += ' public-holiday-column-header';
                     }
-                    tableHTML += `<th class="${headerHighlightClass.trim()}">${date.getDate()}/${(date.getMonth() + 1).toString().padStart(2, '0')}</th>`;
+                    tableHTML += `<th class="${headerClasses}">${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}</th>`;
                 });
                 tableHTML += `</tr>`;
 
-                // Second header row for Day of the Week
-                tableHTML += `<tr>`;
+                // Second header row for Day Names (Mon, Tue, etc.)
+                tableHTML += `<tr><th></th>`; // Empty cell for employee column
                 dates.forEach(date => {
                     const dateString = formatDateToYYYYMMDD(date);
-                    const isSunday = date.getDay() === 0; // 0 is Sunday
-                    const isPH = isPublicHoliday(dateString);
-
-                    let highlightClass = '';
+                    const isSunday = date.getDay() === 0;
+                    const isHoliday = isPublicHoliday(dateString);
+                    let headerClasses = '';
                     if (isSunday) {
-                        highlightClass += ' sunday-column-header';
+                        headerClasses += ' sunday-column-header';
                     }
-                    if (isPH) {
-                        highlightClass += ' public-holiday-column-header';
+                    if (isHoliday) {
+                        headerClasses += ' public-holiday-column-header';
                     }
-                    tableHTML += `<th class="${highlightClass.trim()}">${dayNames[date.getDay()]}</th>`;
+                    tableHTML += `<th class="${headerClasses}">${dayNames[date.getDay()]}</th>`;
                 });
                 tableHTML += `</tr></thead><tbody>`;
 
-                // Add rows for each employee in this shift
-                employees.forEach((employeeName) => {
-                    // Ensure employee entry exists in currentEmployeeShiftCounts
-                    if (!currentEmployeeShiftCounts[employeeName]) {
-                        currentEmployeeShiftCounts[employeeName] = { 
-                            D: 0, N: 0, O: 0, normalHours: 0,
-                            totalSundays: 0, sundayHoursTimeAndAHalf: 0,
-                            sundayNightShifts: 0, // New counter for nights on Sunday
-                            // Initialize all leave types
-                            'annual leave': 0, 'sick leave': 0, 'family responsibility': 0, 'unpaid leave': 0,
-                            // Initialize all extra pay types
-                            ...Object.fromEntries(ALL_EXTRA_PAY_TYPES.map(type => [type, 0]))
+                // Table Body
+                employees.forEach(employee => {
+                    // Initialize employee's counts if not already present
+                    if (!currentEmployeeShiftCounts[employee]) {
+                        currentEmployeeShiftCounts[employee] = {
+                            'D': 0,
+                            'N': 0,
+                            'O': 0,
+                            'Total Shifts': 0,
+                            'normal time': 0, // New: normal time
+                            'night shift total': 0, // New: night shift total
+                            'day & night': 0, // New: day & night (for Night to Day)
+                            'sunday day': 0, // New: Sunday Day count
+                            'sunday night': 0 // New: Sunday Night count
                         };
+                        ALL_LEAVE_TYPES.forEach(leaveType => currentEmployeeShiftCounts[employee][leaveType] = 0);
+                        ALL_EXTRA_PAY_TYPES.forEach(extraPayType => currentEmployeeShiftCounts[employee][extraPayType] = 0);
                     }
 
-                    tableHTML += `<tr><td>${employeeName}</td>`;
+                    tableHTML += `<tr><td class="sticky-employee-column">${employee}</td>`;
                     dates.forEach((date, dayIndex) => {
                         const dateString = formatDateToYYYYMMDD(date);
-                        const isSunday = date.getDay() === 0;
-                        const isPH = isPublicHoliday(dateString);
+                        const dayOfWeek = date.getDay(); // 0 for Sunday, 1 for Monday
+                        const isSunday = dayOfWeek === 0;
+                        const isHoliday = isPublicHoliday(dateString);
+                        const dayIndexInCycle = dayIndex; // This is the 0-indexed day from the start of the roster period
 
                         let cellContent = '';
-                        let cellClass = '';
-                        let isShiftAssigned = true; // Flag to check if a regular shift is assigned or overridden
+                        let cellClasses = '';
 
-                        // Check for Leave
-                        if (employeeLeaveData[employeeName] && employeeLeaveData[employeeName][dateString]) {
-                            const leaveType = employeeLeaveData[employeeName][dateString];
-                            cellContent = leaveType.toUpperCase().split(' ').map(word => word[0]).join(''); // Abbreviate leave type
-                            cellClass = `leave-cell leave-${leaveType.toLowerCase().replace(/ /g, '-')}`;
-                            currentEmployeeShiftCounts[employeeName][leaveType]++;
-                            isShiftAssigned = false;
-                        } 
-                        // Check for Extra Pay (Extra pay overrides normal shift display if present)
-                        else if (employeeExtraPayData[employeeName] && employeeExtraPayData[employeeName][dateString]) {
-                            const extraPayType = employeeExtraPayData[employeeName][dateString];
-                            // Special handling for 'night to day' and 'day to night' display
-                            if (extraPayType === 'night to day') {
-                                cellContent = 'N-D'; // Display N-D for Night to Day
-                            } else if (extraPayType === 'day to night') {
-                                cellContent = 'D-N'; // Display D-N for Day to Night
-                            } else {
-                                cellContent = extraPayType.toUpperCase().split(' ').map(word => word[0]).join(''); // Abbreviate other extra pay types
-                            }
-                            cellClass = `extra-pay-cell extra-pay-${extraPayType.toLowerCase().replace(/ /g, '-')}`;
-                            currentEmployeeShiftCounts[employeeName][extraPayType]++; // Increment count for this extra pay type
-                            isShiftAssigned = false;
+                        // Check for leave
+                        if (employeeLeaveData[employee] && employeeLeaveData[employee][dateString]) {
+                            const leaveType = employeeLeaveData[employee][dateString];
+                            cellContent = leaveType.split(' ').map(word => word[0].toUpperCase()).join(''); // e.g., "Annual Leave" -> "AL"
+                            cellClasses += ` leave-cell leave-${leaveType.replace(/\s+/g, '-')}`;
+                            currentEmployeeShiftCounts[employee][leaveType]++;
                         }
-                        
-                        // If no leave or extra pay, assign regular shift
-                        if (isShiftAssigned) {
-                            // The shift cycle for each employee within a shift group can be offset.
-                            // The `employees.indexOf(employeeName)` provides a unique index for each employee within THIS specific shift (A, B, or C).
-                            // Multiplying by the pattern length ensures a staggered start for each employee's pattern if there are multiple employees in one shift.
-                            const dayIndexInCycle = (dayIndex + employees.indexOf(employeeName) * shiftPattern.length) % shiftPattern.length;
-                            const shiftType = getShiftType(dayIndexInCycle, shiftPattern);
-                            cellContent = shiftType;
-                            
-                            currentEmployeeShiftCounts[employeeName][shiftType]++;
-                            if (shiftType === 'D' || shiftType === 'N') {
-                                currentEmployeeShiftCounts[employeeName].normalHours += 8; // Assuming 8-hour shifts
-                                if (isSunday) {
-                                    currentEmployeeShiftCounts[employeeName].totalSundays++;
-                                    currentEmployeeShiftCounts[employeeName].sundayHoursTimeAndAHalf += 8; // 8 hours at time and a half
-                                    if (shiftType === 'N') { // Track nights on Sunday
-                                        currentEmployeeShiftCounts[employeeName].sundayNightShifts++;
-                                    }
+                        // Check for extra pay
+                        else if (employeeExtraPayData[employee] && employeeExtraPayData[employee][dateString]) {
+                            const extraPayType = employeeExtraPayData[employee][dateString];
+                            cellContent = extraPayType.split(' ').map(word => word[0].toUpperCase()).join(''); // e.g., "Day Overtime" -> "DO"
+                            cellClasses += ` extra-pay-cell extra-pay-${extraPayType.replace(/\s+/g, '-')}`;
+                            currentEmployeeShiftCounts[employee][extraPayType]++;
+                        }
+                        // Otherwise, assign regular shift
+                        else {
+                            const baseShiftType = getShiftType(dayIndexInCycle, shiftPattern);
+                            cellContent = baseShiftType;
+                            currentEmployeeShiftCounts[employee][baseShiftType]++; // Increment D, N, or O count
+                            currentEmployeeShiftCounts[employee]['Total Shifts']++; // Increment total shifts
+
+                            // Specific calculations for normal time, night shift total, day & night
+                            if (baseShiftType === 'D' || baseShiftType === 'N') {
+                                currentEmployeeShiftCounts[employee]['normal time']++;
+                            }
+                            if (baseShiftType === 'N') {
+                                currentEmployeeShiftCounts[employee]['night shift total']++;
+                            }
+                            // The 'Day&Night' column in summary is now 'Night to Day' in extra pay
+                            // This means a shift that transitions from Night to Day.
+                            // This is handled by the extra pay type 'night to day' and not a base shift.
+
+                            // New: Calculate Sunday Day and Sunday Night
+                            if (isSunday) {
+                                if (baseShiftType === 'D') {
+                                    currentEmployeeShiftCounts[employee]['sunday day']++;
+                                } else if (baseShiftType === 'N') {
+                                    currentEmployeeShiftCounts[employee]['sunday night']++;
                                 }
                             }
-                            // Apply Sunday/Public Holiday highlighting to the shift cell
-                            if (isSunday) {
-                                cellClass += ' sunday-column-cell';
-                            }
-                            if (isPH) {
-                                cellClass += ' public-holiday-column-cell';
-                            }
-                        } else {
-                            // If leave or extra pay, still apply Sunday/Public Holiday background if applicable
-                            if (isSunday) {
-                                cellClass += ' sunday-column-cell';
-                            }
-                            if (isPH) {
-                                cellClass += ' public-holiday-column-cell';
-                            }
                         }
-                        tableHTML += `<td class="${cellClass.trim()}">${cellContent}</td>`;
+
+                        // Apply Sunday/Public Holiday highlighting to cell
+                        if (isSunday) {
+                            cellClasses += ' sunday-column-cell';
+                        }
+                        if (isHoliday) {
+                            cellClasses += ' public-holiday-column-cell';
+                        }
+
+                        tableHTML += `<td class="${cellClasses}">${cellContent}</td>`;
                     });
                     tableHTML += `</tr>`;
                 });
@@ -826,79 +835,64 @@
             }
 
             /**
-             * Generates the main roster by combining all shift tables.
+             * Generates the main roster and summary.
              */
             function generateRoster() {
-                const startDate = startDateInput.value;
-                const endDate = endDateInput.value;
-                const employeesA = employeesATextarea.value.split('\n').map(e => e.trim()).filter(e => e);
-                const employeesB = employeesBTextarea.value.split('\n').map(e => e.trim()).filter(e => e);
-                const employeesC = employeesCTextarea.value.split('\n').map(e => e.trim()).filter(e => e);
+                const startDateStr = startDateInput.value;
+                const endDateStr = endDateInput.value;
+                const employeesA = employeesATextarea.value.split('\n').map(name => name.trim()).filter(name => name);
+                const employeesB = employeesBTextarea.value.split('\n').map(name => name.trim()).filter(name => name);
+                const employeesC = employeesCTextarea.value.split('\n').map(name => name.trim()).filter(name => name);
+                const patternA = patternAInput.value.trim().toUpperCase();
+                const patternB = patternBInput.value.trim().toUpperCase();
+                const patternC = patternCInput.value.trim().toUpperCase();
 
-                // Get shift patterns
-                const patternA = patternAInput.value.toUpperCase();
-                const patternB = patternBInput.value.toUpperCase();
-                const patternC = patternCInput.value.toUpperCase();
-
-                // Validate shift patterns - removed length validation
-                const patternRegex = /^[DNO]+$/; // Allows any length, but only D, N, O characters
-                if (!patternRegex.test(patternA)) {
-                    showMessage('Shift A pattern must contain only D, N, or O characters.', 'error');
-                    return;
-                }
-                if (!patternRegex.test(patternB)) {
-                    showMessage('Shift B pattern must contain only D, N, or O characters.', 'error');
-                    return;
-                }
-                if (!patternRegex.test(patternC)) {
-                    showMessage('Shift C pattern must contain only D, N, or O characters.', 'error');
-                    return;
-                }
-
-
-                if (!startDate || !endDate) {
+                if (!startDateStr || !endDateStr) {
                     showMessage('Please select both start and end dates.', 'error');
                     return;
                 }
                 if (employeesA.length === 0 && employeesB.length === 0 && employeesC.length === 0) {
-                    showMessage('Please enter at least one employee for any shift.', 'error');
+                    showMessage('Please enter employees for at least one shift.', 'error');
                     return;
                 }
 
-                const start = parseDateString(startDate);
-                const end = parseDateString(endDate);
-                if (start > end) {
+                const startDate = parseDateString(startDateStr);
+                const endDate = parseDateString(endDateStr);
+
+                if (startDate > endDate) {
                     showMessage('Start date cannot be after end date.', 'error');
                     return;
                 }
 
                 const dates = [];
-                let currentDate = new Date(start);
-                while (currentDate <= end) {
-                    dates.push(new Date(currentDate));
+                let currentDate = new Date(startDate);
+                while (currentDate <= endDate) {
+                    dates.push(new Date(currentDate)); // Push a copy
                     currentDate.setDate(currentDate.getDate() + 1);
                 }
 
-                rosterOutputDiv.innerHTML = '';
-                rosterSummaryDiv.innerHTML = ''; // Clear previous summary
-
-                // Reset employee shift counts for new generation
-                let currentEmployeeShiftCounts = {};
+                let allRosterHTML = '';
+                // This object will accumulate counts for all employees across all shifts
+                let allEmployeeShiftCounts = {};
 
                 if (employeesA.length > 0) {
-                    rosterOutputDiv.innerHTML += generateSingleRosterTable(employeesA, dates, currentEmployeeShiftCounts, "Shift A", patternA);
+                    allRosterHTML += generateSingleRosterTable(employeesA, dates, allEmployeeShiftCounts, "Shift A", patternA);
                 }
                 if (employeesB.length > 0) {
-                    rosterOutputDiv.innerHTML += generateSingleRosterTable(employeesB, dates, currentEmployeeShiftCounts, "Shift B", patternB);
+                    allRosterHTML += generateSingleRosterTable(employeesB, dates, allEmployeeShiftCounts, "Shift B", patternB);
                 }
                 if (employeesC.length > 0) {
-                    rosterOutputDiv.innerHTML += generateSingleRosterTable(employeesC, dates, currentEmployeeShiftCounts, "Shift C", patternC);
+                    allRosterHTML += generateSingleRosterTable(employeesC, dates, allEmployeeShiftCounts, "Shift C", patternC);
                 }
 
+                rosterOutputDiv.innerHTML = allRosterHTML;
                 rosterOutputDiv.classList.remove('hidden');
-                
-                // Generate and display the summary
-                generateRosterSummary(currentEmployeeShiftCounts, dates.length);
+                exportCsvBtn.classList.remove('hidden');
+                generateShiftInsightsBtn.classList.remove('hidden'); // Ensure LLM button is visible after roster generation
+                clearRosterBtn.classList.remove('hidden');
+
+                // Generate and display summary
+                generateRosterSummary(allEmployeeShiftCounts);
 
                 // Apply LLM descriptions if available
                 applyShiftDescriptions();
@@ -907,391 +901,441 @@
 
             /**
              * Generates and displays the roster summary table.
-             * @param {Object} employeeShiftData - Accumulated shift, leave, and extra pay counts for each employee.
-             * @param {number} totalDaysInRoster - Total number of days in the roster period.
+             * @param {Object} allEmployeeShiftCounts - The accumulated shift counts for all employees.
              */
-            function generateRosterSummary(employeeShiftData, totalDaysInRoster) {
-                let summaryHTML = `<h2>Roster Summary</h2>`;
-                summaryHTML += `<div class="summary-table-container"><table class="summary-table"><thead><tr>`;
+            function generateRosterSummary(allEmployeeShiftCounts) {
+                if (Object.keys(allEmployeeShiftCounts).length === 0) {
+                    rosterSummaryDiv.classList.add('hidden');
+                    return;
+                }
+
+                let summaryHTML = `<table class="summary-table"><thead><tr>`;
                 summaryHTML += `<th>Employee Name</th>`;
                 summaryHTML += `<th>Day Shifts (D)</th>`;
                 summaryHTML += `<th>Night Shifts (N)</th>`;
                 summaryHTML += `<th>Off Days (O)</th>`;
-                summaryHTML += `<th>Normal Hours</th>`;
-                summaryHTML += `<th>Sundays Worked</th>`;
-                summaryHTML += `<th>Sunday Hours (x1.5)</th>`;
-                
-                // Add Leave Type headers
+                summaryHTML += `<th>Total Shifts</th>`;
+                summaryHTML += `<th>Normal Time</th>`; // New column
+                summaryHTML += `<th>Night Shift (Total)</th>`; // New column
+                summaryHTML += `<th>Day & Night</th>`; // New column (for Night to Day extra pay)
+                summaryHTML += `<th>Sunday Day</th>`; // New column
+                summaryHTML += `<th>Sunday Night</th>`; // New column
+
+                // Add headers for all leave types
                 ALL_LEAVE_TYPES.forEach(leaveType => {
-                    summaryHTML += `<th>${leaveType.split(' ').map(word => word[0].toUpperCase() + word.slice(1)).join(' ')} Days</th>`;
+                    summaryHTML += `<th>${leaveType.split(' ').map(word => word[0].toUpperCase() + word.slice(1)).join(' ')}</th>`;
                 });
 
-                // Add Extra Pay Type headers
+                // Add headers for all extra pay types
                 ALL_EXTRA_PAY_TYPES.forEach(extraPayType => {
-                    // Display "Night to Day" as "Night to Day" in header
-                    const headerText = extraPayType === 'night to day' ? 'Night to Day' :
-                                       extraPayType === 'day to night' ? 'Day to Night' :
-                                       extraPayType.split(' ').map(word => word[0].toUpperCase() + word.slice(1)).join(' ');
-                    summaryHTML += `<th>${headerText}</th>`;
+                    summaryHTML += `<th>${extraPayType.split(' ').map(word => word[0].toUpperCase() + word.slice(1)).join(' ')}</th>`;
                 });
-
-                // New Night Shift Total Column
-                summaryHTML += `<th>Night Shift (Total)</th>`;
 
                 summaryHTML += `</tr></thead><tbody>`;
 
-                for (const employeeName in employeeShiftData) {
-                    const data = employeeShiftData[employeeName];
-                    
-                    // Calculate total night shifts (corrected calculation)
-                    const totalNightShifts = (data.N || 0) + 
-                                             (data['night overtime'] || 0) + 
-                                             (data['night to day'] || 0) +
-                                             (data['day to night'] || 0);
+                for (const employee in allEmployeeShiftCounts) {
+                    const counts = allEmployeeShiftCounts[employee];
+                    summaryHTML += `<tr><td>${employee}</td>`;
+                    summaryHTML += `<td>${counts['D'] || 0}</td>`;
+                    summaryHTML += `<td>${counts['N'] || 0}</td>`;
+                    summaryHTML += `<td>${counts['O'] || 0}</td>`;
+                    summaryHTML += `<td>${counts['Total Shifts'] || 0}</td>`;
+                    summaryHTML += `<td>${counts['normal time'] || 0}</td>`; // Display normal time
+                    summaryHTML += `<td>${counts['night shift total'] || 0}</td>`; // Display night shift total
+                    summaryHTML += `<td>${counts['night to day'] || 0}</td>`; // Display 'Night to Day' (from extra pay)
+                    summaryHTML += `<td>${counts['sunday day'] || 0}</td>`; // Display Sunday Day count
+                    summaryHTML += `<td>${counts['sunday night'] || 0}</td>`; // Display Sunday Night count
 
-                    summaryHTML += `<tr>`;
-                    summaryHTML += `<td>${employeeName}</td>`;
-                    summaryHTML += `<td>${data.D || 0}</td>`;
-                    summaryHTML += `<td>${data.N || 0}</td>`;
-                    summaryHTML += `<td>${data.O || 0}</td>`;
-                    summaryHTML += `<td>${data.normalHours || 0}</td>`;
-                    summaryHTML += `<td>${data.totalSundays || 0}</td>`;
-                    summaryHTML += `<td>${data.sundayHoursTimeAndAHalf || 0}</td>`;
-
-                    // Add Leave Type counts
+                    // Display counts for all leave types
                     ALL_LEAVE_TYPES.forEach(leaveType => {
-                        summaryHTML += `<td>${data[leaveType] || 0}</td>`;
+                        summaryHTML += `<td>${counts[leaveType] || 0}</td>`;
                     });
 
-                    // Add Extra Pay Type counts
+                    // Display counts for all extra pay types
                     ALL_EXTRA_PAY_TYPES.forEach(extraPayType => {
-                        summaryHTML += `<td>${data[extraPayType] || 0}</td>`;
+                        summaryHTML += `<td>${counts[extraPayType] || 0}</td>`;
                     });
-
-                    // Add total night shifts
-                    summaryHTML += `<td>${totalNightShifts}</td>`;
 
                     summaryHTML += `</tr>`;
                 }
+                summaryHTML += `</tbody></table>`;
 
-                summaryHTML += `</tbody></table></div>`;
-                rosterSummaryDiv.innerHTML = summaryHTML;
+                summaryTableContainer.innerHTML = summaryHTML;
                 rosterSummaryDiv.classList.remove('hidden');
             }
 
             /**
-             * Adds a new dynamic input row for leave entry.
+             * Exports the generated roster data to a CSV file.
              */
-            function addLeaveEntry() {
-                const leaveEntryDiv = document.createElement('div');
-                leaveEntryDiv.classList.add('dynamic-input-row');
-
-                const allEmployees = [
-                    ...employeesATextarea.value.split('\n').map(e => e.trim()).filter(e => e),
-                    ...employeesBTextarea.value.split('\n').map(e => e.trim()).filter(e => e),
-                    ...employeesCTextarea.value.split('\n').map(e => e.trim()).filter(e => e)
-                ];
-                const uniqueEmployees = [...new Set(allEmployees)]; // Get unique names
-
-                if (uniqueEmployees.length === 0) {
-                    showMessage('Please enter employees in the shift text areas first to add leave entries.', 'warning');
+            function exportRosterToCsv() {
+                const rosterTables = rosterOutputDiv.querySelectorAll('.roster-table');
+                if (rosterTables.length === 0) {
+                    showMessage('No roster to export. Please generate a roster first.', 'warning');
                     return;
                 }
 
-                leaveEntryDiv.innerHTML = `
+                let csvContent = "";
+
+                rosterTables.forEach(table => {
+                    const shiftName = table.previousElementSibling ? table.previousElementSibling.textContent.replace(' Roster', '') : 'Roster';
+                    csvContent += `${shiftName}\n`;
+
+                    const headers = [];
+                    table.querySelectorAll('thead tr:first-child th').forEach(th => {
+                        headers.push(th.textContent.trim());
+                    });
+                    csvContent += headers.join(',') + '\n';
+
+                    const dayHeaders = [];
+                    table.querySelectorAll('thead tr:last-child th').forEach(th => {
+                        dayHeaders.push(th.textContent.trim());
+                    });
+                    csvContent += dayHeaders.join(',') + '\n';
+
+                    table.querySelectorAll('tbody tr').forEach(row => {
+                        const rowData = [];
+                        row.querySelectorAll('td').forEach(cell => {
+                            rowData.push(`"${cell.textContent.trim()}"`); // Enclose in quotes to handle commas
+                        });
+                        csvContent += rowData.join(',') + '\n';
+                    });
+                    csvContent += '\n'; // Add a blank line between tables
+                });
+
+                // Add summary table to CSV
+                const summaryTable = summaryTableContainer.querySelector('.summary-table');
+                if (summaryTable) {
+                    csvContent += "Roster Summary\n";
+                    const summaryHeaders = [];
+                    summaryTable.querySelectorAll('thead th').forEach(th => {
+                        summaryHeaders.push(th.textContent.trim());
+                    });
+                    csvContent += summaryHeaders.join(',') + '\n';
+
+                    summaryTable.querySelectorAll('tbody tr').forEach(row => {
+                        const rowData = [];
+                        row.querySelectorAll('td').forEach(cell => {
+                            rowData.push(`"${cell.textContent.trim()}"`);
+                        });
+                        csvContent += rowData.join(',') + '\n';
+                    });
+                }
+
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.setAttribute('href', url);
+                link.setAttribute('download', 'control_room_roster.csv');
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                showMessage('Roster exported to CSV successfully!', 'success');
+            }
+
+            /**
+             * Clears all inputs and the generated roster/summary.
+             */
+            function clearRoster() {
+                startDateInput.value = '';
+                endDateInput.value = '';
+                employeesATextarea.value = '';
+                employeesBTextarea.value = '';
+                employeesCTextarea.value = '';
+                patternAInput.value = 'DDDNNNOOO';
+                patternBInput.value = 'DDDNNNOOO';
+                patternCInput.value = 'DDDNNNOOO';
+
+                rosterOutputDiv.innerHTML = '';
+                rosterOutputDiv.classList.add('hidden');
+                rosterSummaryDiv.innerHTML = '';
+                rosterSummaryDiv.classList.add('hidden');
+                exportCsvBtn.classList.add('hidden');
+                generateShiftInsightsBtn.classList.add('hidden');
+                clearRosterBtn.classList.add('hidden');
+                hideMessage();
+
+                // Clear leave and extra pay data
+                employeeLeaveData = {};
+                employeeLeaveCounts = {};
+                employeeExtraPayData = {};
+                shiftDescriptions = null; // Clear LLM descriptions
+
+                leaveInputsContainer.innerHTML = ''; // Clear dynamic leave inputs
+                extraPayInputsContainer.innerHTML = ''; // Clear dynamic extra pay inputs
+                leaveCountOutput.classList.add('hidden');
+                extraPayOutput.classList.add('hidden');
+
+                showMessage('Roster and inputs cleared.', 'info');
+            }
+
+            /**
+             * Adds a new dynamic row for leave input.
+             */
+            function addLeaveEntryRow() {
+                const newRow = document.createElement('div');
+                newRow.classList.add('dynamic-input-row');
+                newRow.innerHTML = `
                     <div class="input-group">
-                        <label for="leaveEmployee">Employee:</label>
-                        <select class="form-select leave-employee">
-                            <option value="">Select Employee</option>
-                            ${uniqueEmployees.map(emp => `<option value="${emp}">${emp}</option>`).join('')}
-                        </select>
+                        <label>Employee Name:</label>
+                        <input type="text" class="form-input employee-name-input" placeholder="e.g., John Doe">
                     </div>
                     <div class="input-group">
-                        <label for="leaveStartDate">Start Date:</label>
-                        <input type="date" class="form-input leave-start-date" min="${startDateInput.value}" max="${endDateInput.value}">
-                    </div>
-                    <div class="input-group">
-                        <label for="leaveEndDate">End Date:</label>
-                        <input type="date" class="form-input leave-end-date" min="${startDateInput.value}" max="${endDateInput.value}">
-                    </div>
-                    <div class="input-group">
-                        <label for="leaveType">Leave Type:</label>
-                        <select class="form-select leave-type">
-                            <option value="">Select Type</option>
+                        <label>Leave Type:</label>
+                        <select class="form-select leave-type-select">
+                            <option value="">Select Leave Type</option>
                             <option value="annual leave">Annual Leave</option>
                             <option value="sick leave">Sick Leave</option>
                             <option value="family responsibility">Family Responsibility</option>
                             <option value="unpaid leave">Unpaid Leave</option>
                         </select>
                     </div>
+                    <div class="input-group">
+                        <label>Date (YYYY-MM-DD):</label>
+                        <input type="date" class="form-input leave-date-input" min="${startDateInput.value}" max="${endDateInput.value}">
+                    </div>
                     <button type="button" class="remove-btn">Remove</button>
                 `;
-                leaveInputsContainer.appendChild(leaveEntryDiv);
+                leaveInputsContainer.appendChild(newRow);
 
-                // Add event listener for remove button
-                leaveEntryDiv.querySelector('.remove-btn').addEventListener('click', () => {
-                    leaveEntryDiv.remove();
+                // Add event listener to remove button
+                newRow.querySelector('.remove-btn').addEventListener('click', () => {
+                    newRow.remove();
                 });
 
-                // Add event listeners for date validation within the dynamically added row
-                const leaveStartDateInput = leaveEntryDiv.querySelector('.leave-start-date');
-                const leaveEndDateInput = leaveEntryDiv.querySelector('.leave-end-date');
-
-                leaveStartDateInput.addEventListener('change', () => {
-                    if (leaveStartDateInput.value && leaveEndDateInput.value) {
-                        const start = parseDateString(leaveStartDateInput.value);
-                        const end = parseDateString(leaveEndDateInput.value);
-                        if (start > end) {
-                            leaveEndDateInput.value = '';
-                            showMessage('Leave end date cannot be before start date.', 'warning');
-                        }
-                    }
-                    leaveEndDateInput.setAttribute('min', leaveStartDateInput.value);
-                });
-
-                leaveEndDateInput.addEventListener('change', () => {
-                    if (leaveStartDateInput.value && leaveEndDateInput.value) {
-                        const start = parseDateString(leaveStartDateInput.value);
-                        const end = parseDateString(leaveEndDateInput.value);
-                        if (start > end) {
-                            leaveEndDateInput.value = '';
-                            showMessage('Leave end date cannot be before start date.', 'warning');
-                        }
-                    }
-                });
-                updateDynamicRowDateConstraints(); // Apply global date constraints
+                // Update date constraints for the newly added row
+                updateDynamicRowDateConstraints();
             }
 
             /**
-             * Applies all entered leave data to the employeeLeaveData and employeeLeaveCounts.
+             * Applies all leave entries from the dynamic input rows to the employeeLeaveData.
              * Then regenerates the roster.
              */
             function applyAllLeave() {
-                employeeLeaveData = {}; // Clear previous leave data
-                employeeLeaveCounts = {}; // Clear previous leave counts
-                let isValid = true;
+                employeeLeaveData = {}; // Clear existing leave data
+                employeeLeaveCounts = {}; // Clear existing leave counts
 
-                document.querySelectorAll('#leaveInputsContainer .dynamic-input-row').forEach(row => {
-                    const employeeSelect = row.querySelector('.leave-employee');
-                    const startDateInput = row.querySelector('.leave-start-date');
-                    const endDateInput = row.querySelector('.leave-end-date');
-                    const leaveTypeSelect = row.querySelector('.leave-type');
+                const leaveRows = leaveInputsContainer.querySelectorAll('.dynamic-input-row');
+                let hasErrors = false;
 
-                    const employeeName = employeeSelect.value;
-                    const startDate = startDateInput.value;
-                    const endDate = endDateInput.value;
-                    const leaveType = leaveTypeSelect.value;
+                leaveRows.forEach(row => {
+                    const employeeName = row.querySelector('.employee-name-input').value.trim();
+                    const leaveType = row.querySelector('.leave-type-select').value;
+                    const leaveDate = row.querySelector('.leave-date-input').value;
 
-                    if (!employeeName || !startDate || !endDate || !leaveType) {
-                        showMessage('Please fill all fields for each leave entry.', 'error');
-                        isValid = false;
+                    if (!employeeName || !leaveType || !leaveDate) {
+                        showMessage('Please fill in all fields for each leave entry.', 'error');
+                        hasErrors = true;
                         return;
                     }
 
-                    const start = parseDateString(startDate);
-                    const end = parseDateString(endDate);
-
-                    if (start > end) {
-                        showMessage(`Leave end date for ${employeeName} cannot be before start date.`, 'error');
-                        isValid = false;
+                    // Check if employee exists in any shift
+                    const allEmployees = [
+                        ...employeesATextarea.value.split('\n').map(name => name.trim()).filter(name => name),
+                        ...employeesBTextarea.value.split('\n').map(name => name.trim()).filter(name => name),
+                        ...employeesCTextarea.value.split('\n').map(name => name.trim()).filter(name => name)
+                    ];
+                    if (!allEmployees.includes(employeeName)) {
+                        showMessage(`Employee "${employeeName}" not found in any shift. Please check the name.`, 'error');
+                        hasErrors = true;
                         return;
                     }
 
                     if (!employeeLeaveData[employeeName]) {
                         employeeLeaveData[employeeName] = {};
                     }
-                    if (!employeeLeaveCounts[employeeName]) {
-                        employeeLeaveCounts[employeeName] = Object.fromEntries(ALL_LEAVE_TYPES.map(type => [type, 0]));
-                    }
+                    employeeLeaveData[employeeName][leaveDate] = leaveType;
 
-                    let currentDate = new Date(start);
-                    while (currentDate <= end) {
-                        const dateString = formatDateToYYYYMMDD(currentDate);
-                        employeeLeaveData[employeeName][dateString] = leaveType;
-                        currentDate.setDate(currentDate.getDate() + 1);
+                    // Update leave counts
+                    if (!employeeLeaveCounts[employeeName]) {
+                        employeeLeaveCounts[employeeName] = {};
+                        ALL_LEAVE_TYPES.forEach(type => employeeLeaveCounts[employeeName][type] = 0);
                     }
+                    employeeLeaveCounts[employeeName][leaveType]++;
                 });
 
-                if (isValid) {
+                if (!hasErrors) {
                     generateRoster(); // Regenerate roster with applied leave
-                    displayLeaveCounts(); // Display updated leave counts
-                    showMessage('Leave applied successfully!', 'success');
+                    renderLeaveCounts(); // Display leave counts
+                    showMessage('Leave entries applied and roster regenerated.', 'success');
                 }
             }
 
             /**
-             * Displays the accumulated leave counts for each employee.
+             * Renders the calculated leave counts to the UI.
              */
-            function displayLeaveCounts() {
+            function renderLeaveCounts() {
                 leaveCountsList.innerHTML = '';
-                let hasLeave = false;
-                for (const employeeName in employeeLeaveData) {
-                    const leaveDates = employeeLeaveData[employeeName];
-                    const counts = {};
-                    for (const date in leaveDates) {
-                        const type = leaveDates[date];
-                        counts[type] = (counts[type] || 0) + 1;
-                    }
-
-                    let employeeLeaveSummary = `${employeeName}: `;
-                    const leaveTypesPresent = Object.keys(counts).filter(type => counts[type] > 0);
-
-                    if (leaveTypesPresent.length > 0) {
-                        hasLeave = true;
-                        employeeLeaveSummary += leaveTypesPresent.map(type => `${type.split(' ').map(word => word[0].toUpperCase() + word.slice(1)).join(' ')}: ${counts[type]}`).join(', ');
-                        const listItem = document.createElement('li');
-                        listItem.textContent = employeeLeaveSummary;
-                        leaveCountsList.appendChild(listItem);
-                    }
-                }
-                if (hasLeave) {
-                    leaveCountOutput.classList.remove('hidden');
-                } else {
+                if (Object.keys(employeeLeaveCounts).length === 0) {
                     leaveCountOutput.classList.add('hidden');
-                }
-            }
-
-            /**
-             * Adds a new dynamic input row for extra pay entry.
-             */
-            function addExtraPayEntry() {
-                const extraPayEntryDiv = document.createElement('div');
-                extraPayEntryDiv.classList.add('dynamic-input-row');
-
-                const allEmployees = [
-                    ...employeesATextarea.value.split('\n').map(e => e.trim()).filter(e => e),
-                    ...employeesBTextarea.value.split('\n').map(e => e.trim()).filter(e => e),
-                    ...employeesCTextarea.value.split('\n').map(e => e.trim()).filter(e => e)
-                ];
-                const uniqueEmployees = [...new Set(allEmployees)];
-
-                if (uniqueEmployees.length === 0) {
-                    showMessage('Please enter employees in the shift text areas first to add extra pay entries.', 'warning');
                     return;
                 }
 
-                extraPayEntryDiv.innerHTML = `
+                for (const employee in employeeLeaveCounts) {
+                    const counts = employeeLeaveCounts[employee];
+                    let employeeLi = document.createElement('li');
+                    employeeLi.textContent = `${employee}: `;
+                    let details = [];
+                    ALL_LEAVE_TYPES.forEach(type => {
+                        if (counts[type] > 0) {
+                            details.push(`${type.split(' ').map(word => word[0].toUpperCase() + word.slice(1)).join(' ')}: ${counts[type]} days`);
+                        }
+                    });
+                    if (details.length > 0) {
+                        employeeLi.textContent += details.join(', ');
+                        leaveCountsList.appendChild(employeeLi);
+                    }
+                }
+                leaveCountOutput.classList.remove('hidden');
+            }
+
+
+            /**
+             * Adds a new dynamic row for extra pay input.
+             */
+            function addExtraPayEntryRow() {
+                const newRow = document.createElement('div');
+                newRow.classList.add('dynamic-input-row');
+                newRow.innerHTML = `
                     <div class="input-group">
-                        <label for="extraPayEmployee">Employee:</label>
-                        <select class="form-select extra-pay-employee">
-                            <option value="">Select Employee</option>
-                            ${uniqueEmployees.map(emp => `<option value="${emp}">${emp}</option>`).join('')}
-                        </select>
+                        <label>Employee Name:</label>
+                        <input type="text" class="form-input employee-name-input" placeholder="e.g., Jane Doe">
                     </div>
                     <div class="input-group">
-                        <label for="extraPayDate">Date:</label>
-                        <input type="date" class="form-input extra-pay-date" min="${startDateInput.value}" max="${endDateInput.value}">
-                    </div>
-                    <div class="input-group">
-                        <label for="extraPayType">Extra Pay Type:</label>
-                        <select class="form-select extra-pay-type">
-                            <option value="">Select Type</option>
+                        <label>Extra Pay Type:</label>
+                        <select class="form-select extra-pay-type-select">
+                            <option value="">Select Extra Pay Type</option>
                             <option value="day overtime">Day Overtime</option>
                             <option value="night overtime">Night Overtime</option>
                             <option value="public holiday day shift">Public Holiday Day Shift</option>
                             <option value="public holiday night shift">Public Holiday Night Shift</option>
-                            <option value="one normal time and one o/t 2">One Normal Time & One O/T 2</option>
-                            <option value="night to day">Night to Day</option> <!-- Changed text and value -->
-                            <option value="day to night">Day to Night</option> <!-- Added new option -->
+                            <option value="one normal time and one o/t 2">One Normal Time and One O/T 2</option>
+                            <option value="night to day">Night to Day</option>
+                            <option value="day to night">Day to Night</option>
                         </select>
+                    </div>
+                    <div class="input-group">
+                        <label>Date (YYYY-MM-DD):</label>
+                        <input type="date" class="form-input extra-pay-date-input" min="${startDateInput.value}" max="${endDateInput.value}">
                     </div>
                     <button type="button" class="remove-btn">Remove</button>
                 `;
-                extraPayInputsContainer.appendChild(extraPayEntryDiv);
+                extraPayInputsContainer.appendChild(newRow);
 
-                // Add event listener for remove button
-                extraPayEntryDiv.querySelector('.remove-btn').addEventListener('click', () => {
-                    extraPayEntryDiv.remove();
+                // Add event listener to remove button
+                newRow.querySelector('.remove-btn').addEventListener('click', () => {
+                    newRow.remove();
                 });
-                updateDynamicRowDateConstraints(); // Apply global date constraints
+
+                // Update date constraints for the newly added row
+                updateDynamicRowDateConstraints();
             }
 
             /**
-             * Applies all entered extra pay data to the employeeExtraPayData.
+             * Applies all extra pay entries from the dynamic input rows to the employeeExtraPayData.
              * Then regenerates the roster.
              */
             function applyAllExtraPay() {
-                employeeExtraPayData = {}; // Clear previous extra pay data
-                let isValid = true;
+                employeeExtraPayData = {}; // Clear existing extra pay data
 
-                document.querySelectorAll('#extraPayInputsContainer .dynamic-input-row').forEach(row => {
-                    const employeeSelect = row.querySelector('.extra-pay-employee');
-                    const dateInput = row.querySelector('.extra-pay-date');
-                    const extraPayTypeSelect = row.querySelector('.extra-pay-type');
+                const extraPayRows = extraPayInputsContainer.querySelectorAll('.dynamic-input-row');
+                let hasErrors = false;
 
-                    const employeeName = employeeSelect.value;
-                    const date = dateInput.value;
-                    const extraPayType = extraPayTypeSelect.value;
+                extraPayRows.forEach(row => {
+                    const employeeName = row.querySelector('.employee-name-input').value.trim();
+                    const extraPayType = row.querySelector('.extra-pay-type-select').value;
+                    const extraPayDate = row.querySelector('.extra-pay-date-input').value;
 
-                    if (!employeeName || !date || !extraPayType) {
-                        showMessage('Please fill all fields for each extra pay entry.', 'error');
-                        isValid = false;
+                    if (!employeeName || !extraPayType || !extraPayDate) {
+                        showMessage('Please fill in all fields for each extra pay entry.', 'error');
+                        hasErrors = true;
+                        return;
+                    }
+
+                    // Check if employee exists in any shift
+                    const allEmployees = [
+                        ...employeesATextarea.value.split('\n').map(name => name.trim()).filter(name => name),
+                        ...employeesBTextarea.value.split('\n').map(name => name.trim()).filter(name => name),
+                        ...employeesCTextarea.value.split('\n').map(name => name.trim()).filter(name => name)
+                    ];
+                    if (!allEmployees.includes(employeeName)) {
+                        showMessage(`Employee "${employeeName}" not found in any shift. Please check the name.`, 'error');
+                        hasErrors = true;
                         return;
                     }
 
                     if (!employeeExtraPayData[employeeName]) {
                         employeeExtraPayData[employeeName] = {};
                     }
-                    employeeExtraPayData[employeeName][date] = extraPayType;
+                    employeeExtraPayData[employeeName][extraPayDate] = extraPayType;
                 });
 
-                if (isValid) {
+                if (!hasErrors) {
                     generateRoster(); // Regenerate roster with applied extra pay
-                    displayExtraPayDetails(); // Display updated extra pay details
-                    showMessage('Extra pay applied successfully!', 'success');
+                    renderExtraPayDetails(); // Display extra pay details (optional, can be integrated into summary)
+                    showMessage('Extra pay entries applied and roster regenerated.', 'success');
                 }
             }
 
             /**
-             * Displays the accumulated extra pay details for each employee.
+             * Renders the extra pay details to the UI.
+             * This function is currently simple and just lists entries.
+             * The main impact is on the summary table calculation.
              */
-            function displayExtraPayDetails() {
+            function renderExtraPayDetails() {
                 extraPayList.innerHTML = '';
-                let hasExtraPay = false;
-                for (const employeeName in employeeExtraPayData) {
-                    const extraPayDates = employeeExtraPayData[employeeName];
-                    const details = {};
-                    for (const date in extraPayDates) {
-                        const type = extraPayDates[date];
-                        details[type] = (details[type] || 0) + 1;
-                    }
-
-                    let employeeExtraPaySummary = `${employeeName}: `;
-                    const extraPayTypesPresent = Object.keys(details).filter(type => details[type] > 0);
-
-                    if (extraPayTypesPresent.length > 0) {
-                        hasExtraPay = true;
-                        employeeExtraPaySummary += extraPayTypesPresent.map(type => `${type.split(' ').map(word => word[0].toUpperCase() + word.slice(1)).join(' ')}: ${details[type]}`).join(', ');
-                        const listItem = document.createElement('li');
-                        listItem.textContent = employeeExtraPaySummary;
-                        extraPayList.appendChild(listItem);
-                    }
-                }
-                if (hasExtraPay) {
-                    extraPayOutput.classList.remove('hidden');
-                } else {
+                if (Object.keys(employeeExtraPayData).length === 0) {
                     extraPayOutput.classList.add('hidden');
+                    return;
                 }
+
+                for (const employee in employeeExtraPayData) {
+                    const datesWithExtraPay = employeeExtraPayData[employee];
+                    for (const date in datesWithExtraPay) {
+                        const type = datesWithExtraPay[date];
+                        let li = document.createElement('li');
+                        li.textContent = `${employee} on ${date}: ${type.split(' ').map(word => word[0].toUpperCase() + word.slice(1)).join(' ')}`;
+                        extraPayList.appendChild(li);
+                    }
+                }
+                extraPayOutput.classList.remove('hidden');
             }
 
 
             /**
-             * Generates shift insights using the Gemini API and applies them as tooltips.
+             * Calls the LLM to generate shift descriptions based on the provided patterns.
              */
             async function generateShiftInsights() {
-                showMessage('Generating shift insights, please wait...', 'info');
-                generateShiftInsightsBtn.disabled = true;
+                const patternA = patternAInput.value.trim().toUpperCase();
+                const patternB = patternBInput.value.trim().toUpperCase();
+                const patternC = patternCInput.value.trim().toUpperCase();
 
-                const prompt = `Provide a very brief description (1-2 sentences maximum) for each of the following control room shift types:
-                - D (Day Shift)
-                - N (Night Shift)
-                - O (Off Day)
-                
-                Format the output as a JSON object where keys are the shift types (D, N, O) and values are their descriptions.`;
+                if (!patternA && !patternB && !patternC) {
+                    showMessage('Please enter at least one shift pattern to generate insights.', 'warning');
+                    return;
+                }
+
+                loadingIndicator.classList.add('show');
+                generateShiftInsightsBtn.disabled = true; // Disable button during loading
+
+                const prompt = `Given the following shift patterns for a control room, provide a brief, professional description for each shift type (D, N, O). If a pattern is not provided for a shift, assume a standard 9-day cycle (DDDNNNOOO).
+                Shift A Pattern: ${patternA || 'DDDNNNOOO'}
+                Shift B Pattern: ${patternB || 'DDDNNNOOO'}
+                Shift C Pattern: ${patternC || 'DDDNNNOOO'}
+
+                Provide the output as a JSON object with keys 'D', 'N', 'O' and their corresponding descriptions. For example:
+                {
+                  "D": "Day Shift: Employees work during standard daytime hours, typically involving monitoring and routine operations.",
+                  "N": "Night Shift: Employees work during nighttime hours, often handling critical alerts and maintaining continuous surveillance.",
+                  "O": "Off Day: Employees are not scheduled for work, allowing for rest and personal time."
+                }`;
 
                 try {
-                    const payload = {
-                        contents: [{ role: "user", parts: [{ text: prompt }] }],
+                    let chatHistory = [];
+                    chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+                    const payload = { 
+                        contents: chatHistory,
                         generationConfig: {
                             responseMimeType: "application/json",
                             responseSchema: {
@@ -1300,320 +1344,54 @@
                                     "D": { "type": "STRING" },
                                     "N": { "type": "STRING" },
                                     "O": { "type": "STRING" }
-                                },
-                                required: ["D", "N", "O"]
+                                }
                             }
                         }
                     };
-                    const apiKey = ""; // Canvas will provide this
+                    const apiKey = ""; // If you want to use models other than gemini-2.0-flash or imagen-3.0-generate-002, provide an API key here. Otherwise, leave this as-is.
                     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-
+                    
                     const response = await fetch(apiUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
-
                     const result = await response.json();
 
-                    if (result.candidates && result.candidates.length > 0 &&
-                        result.candidates[0].content && result.candidates[0].content.parts &&
-                        result.candidates[0].content.parts.length > 0) {
-                        
-                        const jsonString = result.candidates[0].content.parts[0].text;
-                        shiftDescriptions = JSON.parse(jsonString);
-                        applyShiftDescriptions(); // Apply descriptions to the already generated roster
-                        showMessage('Shift insights generated and applied as tooltips!', 'success');
+                    if (result.candidates && result.candidates.length > 0 && result.candidates[0].content && result.candidates[0].content.parts && result.candidates[0].content.parts.length > 0) {
+                        const jsonText = result.candidates[0].content.parts[0].text;
+                        shiftDescriptions = JSON.parse(jsonText);
+                        showMessage('Shift insights generated successfully! Hover over shifts in the roster for descriptions.', 'success');
+                        // Re-generate roster to apply new tooltips
+                        generateRoster();
                     } else {
                         showMessage('Failed to generate shift insights. Please try again.', 'error');
                         console.error('LLM response structure unexpected:', result);
                     }
                 } catch (error) {
-                    showMessage('Error generating shift insights. Please check your network connection or try again later.', 'error');
+                    showMessage('Error generating shift insights: ' + error.message, 'error');
                     console.error('Error calling LLM:', error);
                 } finally {
-                    generateShiftInsightsBtn.disabled = false;
+                    loadingIndicator.classList.remove('show');
+                    generateShiftInsightsBtn.disabled = false; // Re-enable button
                 }
             }
 
-            /**
-             * Exports the generated roster and summary to a CSV file.
-             */
-            function exportRosterToCsv() {
-                const startDate = startDateInput.value;
-                const endDate = endDateInput.value;
-                if (!startDate || !endDate) {
-                    showMessage('Please generate a roster first before exporting.', 'error');
-                    return;
-                }
-
-                const allEmployees = [
-                    ...employeesATextarea.value.split('\n').map(e => e.trim()).filter(e => e),
-                    ...employeesBTextarea.value.split('\n').map(e => e.trim()).filter(e => e),
-                    ...employeesCTextarea.value.split('\n').map(e => e.trim()).filter(e => e)
-                ];
-                const uniqueEmployees = [...new Set(allEmployees)];
-
-                if (uniqueEmployees.length === 0) {
-                    showMessage('No employee data to export.', 'error');
-                    return;
-                }
-
-                // Get shift patterns for CSV export
-                const patternA = patternAInput.value.toUpperCase();
-                const patternB = patternBInput.value.toUpperCase();
-                const patternC = patternCInput.value.toUpperCase();
-
-                // Re-generate roster data to ensure it's fresh for export
-                const start = parseDateString(startDate);
-                const end = parseDateString(endDate);
-                const dates = [];
-                let currentDate = new Date(start);
-                while (currentDate <= end) {
-                    dates.push(new Date(currentDate));
-                    currentDate.setDate(currentDate.getDate() + 1);
-                }
-
-                let tempEmployeeShiftCounts = {}; // Use a temporary object for export
-
-                // Simulate roster generation to populate tempEmployeeShiftCounts
-                // This is a simplified version just to get the data for CSV
-                const allShiftEmployees = {
-                    'Shift A': employeesATextarea.value.split('\n').map(e => e.trim()).filter(e => e),
-                    'Shift B': employeesBTextarea.value.split('\n').map(e => e.trim()).filter(e => e),
-                    'Shift C': employeesCTextarea.value.split('\n').map(e => e.trim()).filter(e => e)
-                };
-
-                for (const shiftName in allShiftEmployees) {
-                    const employeesInShift = allShiftEmployees[shiftName];
-                    const currentPattern = shiftName === 'Shift A' ? patternA :
-                                           shiftName === 'Shift B' ? patternB :
-                                           patternC;
-
-                    employeesInShift.forEach((employeeName) => {
-                        if (!tempEmployeeShiftCounts[employeeName]) {
-                            tempEmployeeShiftCounts[employeeName] = { 
-                                D: 0, N: 0, O: 0, normalHours: 0,
-                                totalSundays: 0, sundayHoursTimeAndAHalf: 0,
-                                sundayNightShifts: 0, // New counter for nights on Sunday
-                                ...Object.fromEntries(ALL_LEAVE_TYPES.map(type => [type, 0])),
-                                ...Object.fromEntries(ALL_EXTRA_PAY_TYPES.map(type => [type, 0]))
-                            };
-                        }
-
-                        dates.forEach((date, dayIndex) => {
-                            const dateString = formatDateToYYYYMMDD(date);
-                            const isSunday = date.getDay() === 0;
-                            const isPH = isPublicHoliday(dateString);
-
-                            let isShiftAssigned = true;
-
-                            // Check for Leave
-                            if (employeeLeaveData[employeeName] && employeeLeaveData[employeeName][dateString]) {
-                                const leaveType = employeeLeaveData[employeeName][dateString];
-                                tempEmployeeShiftCounts[employeeName][leaveType]++;
-                                isShiftAssigned = false;
-                            } 
-                            // Check for Extra Pay
-                            else if (employeeExtraPayData[employeeName] && employeeExtraPayData[employeeName][dateString]) {
-                                const extraPayType = employeeExtraPayData[employeeName][dateString];
-                                tempEmployeeShiftCounts[employeeName][extraPayType]++;
-                                isShiftAssigned = false;
-                            }
-                            
-                            if (isShiftAssigned) {
-                                // The dayIndexInCycle needs to be consistent for each employee for the pattern to apply correctly
-                                // The current logic uses `uniqueEmployees.indexOf(employeeName) * pattern.length` to stagger the pattern.
-                                // This ensures consistency across all employees for CSV export.
-                                const dayIndexInCycle = (dayIndex + uniqueEmployees.indexOf(employeeName) * currentPattern.length) % currentPattern.length;
-                                const shiftType = getShiftType(dayIndexInCycle, currentPattern);
-                                
-                                tempEmployeeShiftCounts[employeeName][shiftType]++;
-                                if (shiftType === 'D' || shiftType === 'N') {
-                                    tempEmployeeShiftCounts[employeeName].normalHours += 8;
-                                    if (isSunday) {
-                                        tempEmployeeShiftCounts[employeeName].totalSundays++;
-                                        tempEmployeeShiftCounts[employeeName].sundayHoursTimeAndAHalf += 8;
-                                        if (shiftType === 'N') { // Track nights on Sunday for CSV export
-                                            tempEmployeeShiftCounts[employeeName].sundayNightShifts++;
-                                        }
-                                    }
-                                }
-                            }
-                        });
-                    });
-                }
-
-
-                let csvContent = "data:text/csv;charset=utf-8,";
-
-                // Roster Table Headers
-                const rosterHeaders = ["Employee Name"];
-                const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-                dates.forEach(date => {
-                    rosterHeaders.push(`${date.getDate()}/${(date.getMonth() + 1).toString().padStart(2, '0')} (${dayNames[date.getDay()]})`);
-                });
-                csvContent += rosterHeaders.join(",") + "\n";
-
-                // Roster Table Data
-                const allRosterEmployees = [
-                    ...employeesATextarea.value.split('\n').map(e => e.trim()).filter(e => e),
-                    ...employeesBTextarea.value.split('\n').map(e => e.trim()).filter(e => e),
-                    ...employeesCTextarea.value.split('\n').map(e => e.trim()).filter(e => e)
-                ];
-                const uniqueRosterEmployees = [...new Set(allRosterEmployees)]; // Ensure unique list for roster rows
-
-                uniqueRosterEmployees.forEach(employeeName => {
-                    const rowData = [employeeName];
-                    dates.forEach((date, dayIndex) => {
-                        const dateString = formatDateToYYYYMMDD(date);
-                        let cellContent = '';
-
-                        // Determine the shift group for the employee to get the correct pattern
-                        let currentPatternForEmployee = '';
-                        if (allShiftEmployees['Shift A'].includes(employeeName)) {
-                            currentPatternForEmployee = patternA;
-                        } else if (allShiftEmployees['Shift B'].includes(employeeName)) {
-                            currentPatternForEmployee = patternB;
-                        } else if (allShiftEmployees['Shift C'].includes(employeeName)) {
-                            currentPatternForEmployee = patternC;
-                        }
-                        
-                        let isShiftAssigned = true;
-
-                        // Check for Leave
-                        if (employeeLeaveData[employeeName] && employeeLeaveData[employeeName][dateString]) {
-                            const leaveType = employeeLeaveData[employeeName][dateString];
-                            cellContent = leaveType.toUpperCase().split(' ').map(word => word[0]).join(''); // Abbreviate leave type
-                            isShiftAssigned = false;
-                        } 
-                        // Check for Extra Pay
-                        else if (employeeExtraPayData[employeeName] && employeeExtraPayData[employeeName][dateString]) {
-                            const extraPayType = employeeExtraPayData[employeeName][dateString];
-                            // Special handling for 'night to day' and 'day to night' display
-                            if (extraPayType === 'night to day') {
-                                cellContent = 'N-D'; // Display N-D for Night to Day
-                            } else if (extraPayType === 'day to night') {
-                                cellContent = 'D-N'; // Display D-N for Day to Night
-                            } else {
-                                cellContent = extraPayType.toUpperCase().split(' ').map(word => word[0]).join(''); // Abbreviate other extra pay types
-                            }
-                            isShiftAssigned = false;
-                        }
-
-                        if (isShiftAssigned) {
-                            // The cycle calculation for the roster needs to be consistent.
-                            // Use the overall uniqueRosterEmployees index for consistent staggering across all employees
-                            const dayIndexInCycle = (dayIndex + uniqueRosterEmployees.indexOf(employeeName) * currentPatternForEmployee.length) % currentPatternForEmployee.length;
-                            cellContent = getShiftType(dayIndexInCycle, currentPatternForEmployee);
-                        }
-                        rowData.push(cellContent);
-                    });
-                    csvContent += rowData.join(",") + "\n";
-                });
-
-                csvContent += "\n\n"; // Separator between roster and summary
-
-                // Summary Table Headers
-                const summaryHeaders = ["Employee Name", "Day Shifts (D)", "Night Shifts (N)", "Off Days (O)", "Normal Hours", "Sundays Worked", "Sunday Hours (x1.5)"];
-                ALL_LEAVE_TYPES.forEach(leaveType => {
-                    summaryHeaders.push(`${leaveType.split(' ').map(word => word[0].toUpperCase() + word.slice(1)).join(' ')} Days`);
-                });
-                ALL_EXTRA_PAY_TYPES.forEach(extraPayType => {
-                     // Display "Night to Day" as "Night to Day" in header for CSV
-                    const headerText = extraPayType === 'night to day' ? 'Night to Day' :
-                                       extraPayType === 'day to night' ? 'Day to Night' :
-                                       extraPayType.split(' ').map(word => word[0].toUpperCase() + word.slice(1)).join(' ');
-                    summaryHeaders.push(headerText);
-                });
-                // New Night Shift Total Column header for CSV
-                summaryHeaders.push("Night Shift (Total)");
-
-                csvContent += summaryHeaders.join(",") + "\n";
-
-                // Summary Table Data
-                for (const employeeName in tempEmployeeShiftCounts) {
-                    const data = tempEmployeeShiftCounts[employeeName];
-                    
-                    // Calculate total night shifts for CSV (corrected calculation)
-                    const totalNightShiftsForCsv = (data.N || 0) + 
-                                                   (data['night overtime'] || 0) + 
-                                                   (data['night to day'] || 0) +
-                                                   (data['day to night'] || 0);
-
-                    const rowData = [ 
-                        employeeName,
-                        data.D || 0,
-                        data.N || 0,
-                        data.O || 0,
-                        data.normalHours || 0,
-                        data.totalSundays || 0,
-                        data.sundayHoursTimeAndAHalf || 0
-                    ];
-                    ALL_LEAVE_TYPES.forEach(leaveType => {
-                        rowData.push(data[leaveType] || 0);
-                    });
-                    ALL_EXTRA_PAY_TYPES.forEach(extraPayType => {
-                        rowData.push(data[extraPayType] || 0);
-                    });
-                    // Add total night shifts to CSV row
-                    rowData.push(totalNightShiftsForCsv);
-
-                    csvContent += rowData.join(",") + "\n";
-                }
-
-                const encodedUri = encodeURI(csvContent);
-                const link = document.createElement("a");
-                link.setAttribute("href", encodedUri);
-                link.setAttribute("download", "control_room_roster.csv");
-                document.body.appendChild(link); // Required for Firefox
-                link.click();
-                document.body.removeChild(link); // Clean up
-                showMessage('Roster exported to CSV successfully!', 'success');
-            }
-
-            /**
-             * Clears all input fields and generated roster/summary.
-             */
-            function clearRoster() {
-                startDateInput.value = '';
-                endDateInput.value = '';
-                employeesATextarea.value = '';
-                employeesBTextarea.value = '';
-                employeesCTextarea.value = '';
-                patternAInput.value = 'DDDNNNOOO'; // Reset to default
-                patternBInput.value = 'DDDNNNOOO'; // Reset to default
-                patternCInput.value = 'DDDNNNOOO'; // Reset to default
-                rosterOutputDiv.innerHTML = '';
-                rosterOutputDiv.classList.add('hidden');
-                rosterSummaryDiv.innerHTML = '';
-                rosterSummaryDiv.classList.add('hidden');
-                messageBox.classList.add('hidden'); // Hide message box
-
-                // Clear leave and extra pay data and inputs
-                employeeLeaveData = {};
-                employeeLeaveCounts = {};
-                employeeExtraPayData = {};
-                leaveInputsContainer.innerHTML = '';
-                extraPayInputsContainer.innerHTML = '';
-                leaveCountOutput.classList.add('hidden');
-                extraPayOutput.classList.add('hidden');
-                leaveCountsList.innerHTML = '';
-                extraPayList.innerHTML = '';
-                shiftDescriptions = null; // Clear LLM descriptions
-
-                showMessage('Roster data cleared.', 'info');
-            }
 
             // Event Listeners
             generateRosterBtn.addEventListener('click', generateRoster);
             exportCsvBtn.addEventListener('click', exportRosterToCsv);
-            generateShiftInsightsBtn.addEventListener('click', generateShiftInsights);
+            generateShiftInsightsBtn.addEventListener('click', generateShiftInsights); // New: LLM Button listener
             clearRosterBtn.addEventListener('click', clearRoster);
-            addLeaveEntryBtn.addEventListener('click', addLeaveEntry);
+            addLeaveEntryBtn.addEventListener('click', addLeaveEntryRow);
             applyAllLeaveBtn.addEventListener('click', applyAllLeave);
-            addExtraPayEntryBtn.addEventListener('click', addExtraPayEntry);
+            addExtraPayEntryBtn.addEventListener('click', addExtraPayEntryRow);
             applyAllExtraPayBtn.addEventListener('click', applyAllExtraPay);
+
+            // Initial state adjustments
+            exportCsvBtn.classList.add('hidden');
+            generateShiftInsightsBtn.classList.add('hidden');
+            clearRosterBtn.classList.add('hidden');
         });
     </script>
 </body>
