@@ -327,6 +327,17 @@
         .loading-indicator.show {
             display: block;
         }
+        /* Flex container for date input and indicator */
+        .date-input-container {
+            display: flex;
+            align-items: center;
+            gap: 8px; /* Space between input and indicator */
+        }
+        .holiday-indicator {
+            color: #dc2626; /* Red color for PH text */
+            font-weight: 600;
+            font-size: 0.875rem; /* text-sm */
+        }
     </style>
 </head>
 <body class="selection:bg-indigo-300">
@@ -336,11 +347,17 @@
         <div class="input-section grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="input-group">
                 <label for="startDate">Roster Start Date:</label>
-                <input type="date" id="startDate" class="form-input" min="" max="">
+                <div class="date-input-container">
+                    <input type="date" id="startDate" class="form-input" min="" max="">
+                    <span id="startDateHolidayIndicator" class="holiday-indicator hidden">PH</span>
+                </div>
             </div>
             <div class="input-group">
                 <label for="endDate">Roster End Date:</label>
-                <input type="date" id="endDate" class="form-input" min="" max="">
+                <div class="date-input-container">
+                    <input type="date" id="endDate" class="form-input" min="" max="">
+                    <span id="endDateHolidayIndicator" class="holiday-indicator hidden">PH</span>
+                </div>
             </div>
         </div>
 
@@ -538,13 +555,15 @@
             const extraPayOutput = document.getElementById('extraPayOutput');
             const extraPayList = document.getElementById('extraPayList');
 
+            // Holiday indicators
+            const startDateHolidayIndicator = document.getElementById('startDateHolidayIndicator');
+            const endDateHolidayIndicator = document.getElementById('endDateHolidayIndicator');
+
 
             // Set min date to 2025-01-01
             const overallMinDate = `2025-01-01`;
-            // Max date is December 31st of the next year from the current year
-            const currentYear = new Date().getFullYear();
-            const nextYear = currentYear + 1;
-            const overallMaxDate = `${nextYear}-12-31`;
+            // Max date is December 31st of 2030
+            const overallMaxDate = `2030-12-31`;
 
             startDateInput.setAttribute('min', overallMinDate);
             startDateInput.setAttribute('max', overallMaxDate);
@@ -579,6 +598,19 @@
                 return `${year}-${month}-${day}`;
             }
 
+            /**
+             * Updates the public holiday indicator next to a date input.
+             * @param {HTMLInputElement} dateInput - The date input element.
+             * @param {HTMLElement} indicatorSpan - The span element for the indicator.
+             */
+            function updateDateInputHolidayIndicator(dateInput, indicatorSpan) {
+                if (dateInput.value && isPublicHoliday(dateInput.value)) {
+                    indicatorSpan.classList.remove('hidden');
+                } else {
+                    indicatorSpan.classList.add('hidden');
+                }
+            }
+
             // Event listener to ensure endDate is not before startDate
             startDateInput.addEventListener('change', () => {
                 if (startDateInput.value && endDateInput.value) {
@@ -598,6 +630,7 @@
                 endDateInput.setAttribute('min', startDateInput.value);
                 // Update min/max dates for dynamically added rows
                 updateDynamicRowDateConstraints();
+                updateDateInputHolidayIndicator(startDateInput, startDateHolidayIndicator);
             });
 
             endDateInput.addEventListener('change', () => {
@@ -611,6 +644,7 @@
                 }
                 // Update min/max dates for dynamically added rows
                 updateDynamicRowDateConstraints();
+                updateDateInputHolidayIndicator(endDateInput, endDateHolidayIndicator);
             });
 
             /**
@@ -1067,6 +1101,10 @@
                 leaveCountOutput.classList.add('hidden');
                 extraPayOutput.classList.add('hidden');
 
+                // Hide holiday indicators on clear
+                startDateHolidayIndicator.classList.add('hidden');
+                endDateHolidayIndicator.classList.add('hidden');
+
                 showMessage('Roster and inputs cleared.', 'info');
             }
 
@@ -1392,6 +1430,10 @@
             exportCsvBtn.classList.add('hidden');
             generateShiftInsightsBtn.classList.add('hidden');
             clearRosterBtn.classList.add('hidden');
+
+            // Initial check for holiday indicators if dates are pre-filled
+            updateDateInputHolidayIndicator(startDateInput, startDateHolidayIndicator);
+            updateDateInputHolidayIndicator(endDateInput, endDateHolidayIndicator);
         });
     </script>
 </body>
