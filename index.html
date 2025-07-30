@@ -943,7 +943,8 @@
                 summaryHTML += `<th>Total Shifts</th>`;
                 summaryHTML += `<th>Normal Time</th>`; // Existing column
                 summaryHTML += `<th>Normal Hours</th>`; // New column
-
+                summaryHTML += `<th>OT1 (after 208 hrs normal)</th>`; // New OT1 column
+                
                 // New Sunday columns, placed before Sunday Day/Night
                 summaryHTML += `<th>Sundays Worked</th>`; // New column
                 summaryHTML += `<th>Sunday Hours' Time and a half</th>`; // New column
@@ -955,6 +956,7 @@
                 
                 // New C/R Total Shifts Worked column
                 summaryHTML += `<th>C/R (Total no. of shifts worked)</th>`;
+                summaryHTML += `<th>Overtime 2 (Red)</th>`; // New Overtime 2 column
 
                 // Add headers for all leave types
                 ALL_LEAVE_TYPES.forEach(leaveType => {
@@ -972,6 +974,7 @@
                     const counts = allEmployeeShiftCounts[employee];
                     const normalTime = counts['normal time'] || 0;
                     const normalHours = normalTime * 12; // Calculate Normal Hours
+                    const ot1Hours = normalHours > 208 ? normalHours - 208 : 0; // Calculate OT1 hours
                     const sundaysWorked = counts['sundays worked'] || 0; // Get Sundays Worked count
                     const sundayHoursTimeAndAHalf = sundaysWorked * 18; // Calculate Sunday Hours' Time and a half
 
@@ -983,6 +986,9 @@
                         (counts['night overtime'] || 0) +
                         (counts['sunday day'] || 0) +
                         (counts['sunday night'] || 0);
+                    
+                    // Calculate Overtime 2 (Red)
+                    const overtime2Red = (counts['day overtime'] || 0) + (counts['night overtime'] || 0);
 
 
                     summaryHTML += `<tr><td>${employee}</td>`;
@@ -992,6 +998,7 @@
                     summaryHTML += `<td>${counts['Total Shifts'] || 0}</td>`;
                     summaryHTML += `<td>${normalTime}</td>`; // Display Normal Time
                     summaryHTML += `<td>${normalHours}</td>`; // Display Normal Hours
+                    summaryHTML += `<td>${ot1Hours}</td>`; // Display OT1 Hours
 
                     // Display new Sunday columns
                     summaryHTML += `<td>${sundaysWorked}</td>`;
@@ -1004,6 +1011,7 @@
                     
                     // Display C/R Total Shifts Worked
                     summaryHTML += `<td>${crTotalShiftsWorked}</td>`;
+                    summaryHTML += `<td>${overtime2Red}</td>`; // Display Overtime 2 (Red)
 
                     // Display counts for all leave types
                     ALL_LEAVE_TYPES.forEach(leaveType => {
@@ -1416,9 +1424,9 @@
 
                 Provide the output as a JSON object with keys 'D', 'N', 'O' and their corresponding descriptions. For example:
                 {
-                  "D": "Day Shift: Employees work during standard daytime hours, typically involving monitoring and routine operations.",
-                  "N": "Night Shift: Employees work during nighttime hours, often handling critical alerts and maintaining continuous surveillance.",
-                  "O": "Off Day: Employees are not scheduled for work, allowing for rest and personal time."
+                    "D": "Day Shift: Employees work during standard daytime hours, typically involving monitoring and routine operations.",
+                    "N": "Night Shift: Employees work during nighttime hours, often handling critical alerts and maintaining continuous surveillance.",
+                    "O": "Off Day: Employees are not scheduled for work, allowing for rest and personal time."
                 }`;
 
                 try {
@@ -1438,8 +1446,8 @@
                             }
                         }
                     };
-                    const apiKey = ""; // If you want to use models other than gemini-2.0-flash or imagen-3.0-generate-002, provide an API key here. Otherwise, leave this as-is.
-                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                    const apiKey = ""; // If you want to use models other than gemini-2.5-flash-preview-05-20 or imagen-3.0-generate-002, provide an API key here. Otherwise, leave this as-is.
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
                     
                     const response = await fetch(apiUrl, {
                         method: 'POST',
