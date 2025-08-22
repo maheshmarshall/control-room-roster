@@ -325,113 +325,255 @@
             font-weight: 600;
             font-size: 0.875rem; /* text-sm */
         }
+        /* Tab button styles */
+        .tab-button-group {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        .tab-button {
+            padding: 12px 24px;
+            font-weight: 600;
+            color: #64748b;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px; /* Pull button to align with border */
+        }
+        .tab-button:hover {
+            color: #1e293b;
+        }
+        .tab-button.active {
+            color: #4f46e5;
+            border-bottom-color: #4f46e5;
+        }
+        /* Tab content */
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        /* Formulas section styling */
+        .formulas-list {
+            list-style: none;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            font-size: 1.125rem;
+        }
+        .formulas-list li {
+            background-color: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        }
+        .formula-title {
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 8px;
+        }
+        .formula-equation {
+            font-family: monospace;
+            background-color: #e0e7ff;
+            color: #1e40af;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body class="selection:bg-indigo-300">
     <div class="container">
         <h1 class="text-3xl sm:text-4xl">Control Room Roster Generator</h1>
 
-        <div class="input-section grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="input-group">
-                <label for="startDate">Roster Start Date:</label>
-                <div class="date-input-container">
-                    <input type="date" id="startDate" class="form-input" min="" max="">
-                    <span id="startDateHolidayIndicator" class="holiday-indicator hidden">PH</span>
+        <!-- Tab Buttons -->
+        <div class="tab-button-group">
+            <button id="rosterTabBtn" class="tab-button active">Roster Generator</button>
+            <button id="formulasTabBtn" class="tab-button">Formulas</button>
+        </div>
+
+        <!-- Roster Generator Tab Content -->
+        <div id="rosterTabContent" class="tab-content active">
+            <div class="input-section grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="input-group">
+                    <label for="startDate">Roster Start Date:</label>
+                    <div class="date-input-container">
+                        <input type="date" id="startDate" class="form-input" min="" max="">
+                        <span id="startDateHolidayIndicator" class="holiday-indicator hidden">PH</span>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="endDate">Roster End Date:</label>
+                    <div class="date-input-container">
+                        <input type="date" id="endDate" class="form-input" min="" max="">
+                        <span id="endDateHolidayIndicator" class="holiday-indicator hidden">PH</span>
+                    </div>
                 </div>
             </div>
-            <div class="input-group">
-                <label for="endDate">Roster End Date:</label>
-                <div class="date-input-container">
-                    <input type="date" id="endDate" class="form-input" min="" max="">
-                    <span id="endDateHolidayIndicator" class="holiday-indicator hidden">PH</span>
+
+            <div class="input-section grid grid-cols-1 md:grid-cols-3 gap-6 mt-6"> <!-- New section for shifts -->
+                <div class="input-group">
+                    <label for="employeesA">Shift A Employees (One per line):</label>
+                    <textarea id="employeesA" rows="8" placeholder="Enter Shift A employee names here..." class="form-textarea"></textarea>
+                </div>
+                <div class="input-group">
+                    <label for="employeesB">Shift B Employees (One per line):</label>
+                    <textarea id="employeesB" rows="8" placeholder="Enter Shift B employee names here..." class="form-textarea"></textarea>
+                </div>
+                <div class="input-group">
+                    <label for="employeesC">Shift C Employees (One per line):</label>
+                    <textarea id="employeesC" rows="8" placeholder="Enter Shift C employee names here..." class="form-textarea"></textarea>
+                </div>
+            </div>
+
+            <!-- Shift Pattern Input Section -->
+            <div class="input-section grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+                <div class="input-group">
+                    <label for="patternA">Shift A Pattern (e.g., DDDNNNOOO):</label>
+                    <input type="text" id="patternA" class="form-input" value="DDDNNNOOO" pattern="[DNO]+" title="Pattern must contain only D, N, or O characters">
+                </div>
+                <div class="input-group">
+                    <label for="patternB">Shift B Pattern (e.g., DDDNNNOOO):</label>
+                    <input type="text" id="patternB" class="form-input" value="DDDNNNOOO" pattern="[DNO]+" title="Pattern must contain only D, N, or O characters">
+                </div>
+                <div class="input-group">
+                    <label for="patternC">Shift C Pattern (e.g., DDDNNNOOO):</label>
+                    <input type="text" id="patternC" class="form-input" value="DDDNNNOOO" pattern="[DNO]+" title="Pattern must contain only D, N, or O characters">
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button id="generateRosterBtn" class="btn">Generate Roster</button>
+                <button id="exportCsvBtn" class="btn">Export to CSV</button>
+                <button id="generateShiftInsightsBtn" class="btn">Generate Shift Insights ✨</button> <!-- New LLM Button -->
+                <button id="clearRosterBtn" class="btn btn-secondary">Clear Roster</button>
+            </div>
+
+            <div id="messageBox" class="message-box"></div>
+            <div id="loadingIndicator" class="loading-indicator">Generating insights...</div>
+
+
+            <!-- Leave Management Section -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4">Leave Management</h2>
+                <div id="leaveInputsContainer">
+                    <!-- Dynamic leave input rows will be added here -->
+                </div>
+                <div class="flex gap-4 mt-4">
+                    <button id="addLeaveEntryBtn" class="btn bg-gray-500 hover:bg-gray-700 text-white">Add Leave Entry</button>
+                    <button id="applyAllLeaveBtn" class="btn bg-blue-500 hover:bg-blue-700 text-white">Apply All Leave</button>
+                </div>
+                <div id="leaveCountOutput" class="mt-4 p-3 bg-gray-100 rounded-md hidden">
+                    <h3 class="text-lg font-medium mb-2">Leave Counts:</h3>
+                    <ul id="leaveCountsList" class="list-disc pl-5"></ul>
+                </div>
+            </div>
+
+            <!-- Extra Pay Management Section -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4">Extra Pay Management</h2>
+                <div id="extraPayInputsContainer">
+                    <!-- Dynamic extra pay input rows will be added here -->
+                </div>
+                <div class="flex gap-4 mt-4">
+                    <button id="addExtraPayEntryBtn" class="btn bg-gray-500 hover:bg-gray-700 text-white">Add Extra Pay Entry</button>
+                    <button id="applyAllExtraPayBtn" class="btn bg-purple-500 hover:bg-purple-700 text-white">Apply All Extra Pay</button>
+                </div>
+                <div id="extraPayOutput" class="mt-4 p-3 bg-gray-100 rounded-md hidden">
+                    <h3 class="text-lg font-medium mb-2">Extra Pay Details:</h3>
+                    <ul id="extraPayList" class="list-disc pl-5"></ul>
+                </div>
+            </div>
+
+
+            <div id="rosterOutput" class="roster-output hidden">
+                <!-- Roster table(s) will be generated here -->
+            </div>
+
+            <div id="rosterSummary" class="roster-summary hidden">
+                <h2>Roster Summary</h2>
+                <div id="summaryTableContainer" class="summary-table-container">
+                    <!-- Summary table will be generated here -->
                 </div>
             </div>
         </div>
 
-        <div class="input-section grid grid-cols-1 md:grid-cols-3 gap-6 mt-6"> <!-- New section for shifts -->
-            <div class="input-group">
-                <label for="employeesA">Shift A Employees (One per line):</label>
-                <textarea id="employeesA" rows="8" placeholder="Enter Shift A employee names here..." class="form-textarea"></textarea>
-            </div>
-            <div class="input-group">
-                <label for="employeesB">Shift B Employees (One per line):</label>
-                <textarea id="employeesB" rows="8" placeholder="Enter Shift B employee names here..." class="form-textarea"></textarea>
-            </div>
-            <div class="input-group">
-                <label for="employeesC">Shift C Employees (One per line):</label>
-                <textarea id="employeesC" rows="8" placeholder="Enter Shift C employee names here..." class="form-textarea"></textarea>
-            </div>
-        </div>
-
-        <!-- Shift Pattern Input Section -->
-        <div class="input-section grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-            <div class="input-group">
-                <label for="patternA">Shift A Pattern (e.g., DDDNNNOOO):</label>
-                <input type="text" id="patternA" class="form-input" value="DDDNNNOOO" pattern="[DNO]+" title="Pattern must contain only D, N, or O characters">
-            </div>
-            <div class="input-group">
-                <label for="patternB">Shift B Pattern (e.g., DDDNNNOOO):</label>
-                <input type="text" id="patternB" class="form-input" value="DDDNNNOOO" pattern="[DNO]+" title="Pattern must contain only D, N, or O characters">
-            </div>
-            <div class="input-group">
-                <label for="patternC">Shift C Pattern (e.g., DDDNNNOOO):</label>
-                <input type="text" id="patternC" class="form-input" value="DDDNNNOOO" pattern="[DNO]+" title="Pattern must contain only D, N, or O characters">
-            </div>
-        </div>
-
-        <div class="button-group">
-            <button id="generateRosterBtn" class="btn">Generate Roster</button>
-            <button id="exportCsvBtn" class="btn">Export to CSV</button>
-            <button id="generateShiftInsightsBtn" class="btn">Generate Shift Insights ✨</button> <!-- New LLM Button -->
-            <button id="clearRosterBtn" class="btn btn-secondary">Clear Roster</button>
-        </div>
-
-        <div id="messageBox" class="message-box"></div>
-        <div id="loadingIndicator" class="loading-indicator">Generating insights...</div>
-
-
-        <!-- Leave Management Section -->
-        <div class="bg-white p-6 rounded-lg shadow-md">
-            <h2 class="text-xl font-semibold mb-4">Leave Management</h2>
-            <div id="leaveInputsContainer">
-                <!-- Dynamic leave input rows will be added here -->
-            </div>
-            <div class="flex gap-4 mt-4">
-                <button id="addLeaveEntryBtn" class="btn bg-gray-500 hover:bg-gray-700 text-white">Add Leave Entry</button>
-                <button id="applyAllLeaveBtn" class="btn bg-blue-500 hover:bg-blue-700 text-white">Apply All Leave</button>
-            </div>
-            <div id="leaveCountOutput" class="mt-4 p-3 bg-gray-100 rounded-md hidden">
-                <h3 class="text-lg font-medium mb-2">Leave Counts:</h3>
-                <ul id="leaveCountsList" class="list-disc pl-5"></ul>
-            </div>
-        </div>
-
-        <!-- Extra Pay Management Section -->
-        <div class="bg-white p-6 rounded-lg shadow-md">
-            <h2 class="text-xl font-semibold mb-4">Extra Pay Management</h2>
-            <div id="extraPayInputsContainer">
-                <!-- Dynamic extra pay input rows will be added here -->
-            </div>
-            <div class="flex gap-4 mt-4">
-                <button id="addExtraPayEntryBtn" class="btn bg-gray-500 hover:bg-gray-700 text-white">Add Extra Pay Entry</button>
-                <button id="applyAllExtraPayBtn" class="btn bg-purple-500 hover:bg-purple-700 text-white">Apply All Extra Pay</button>
-            </div>
-            <div id="extraPayOutput" class="mt-4 p-3 bg-gray-100 rounded-md hidden">
-                <h3 class="text-lg font-medium mb-2">Extra Pay Details:</h3>
-                <ul id="extraPayList" class="list-disc pl-5"></ul>
-            </div>
-        </div>
-
-
-        <div id="rosterOutput" class="roster-output hidden">
-            <!-- Roster table(s) will be generated here -->
-        </div>
-
-        <div id="rosterSummary" class="roster-summary hidden">
-            <h2>Roster Summary</h2>
-            <div id="summaryTableContainer" class="summary-table-container">
-                <!-- Summary table will be generated here -->
-            </div>
+        <!-- Formulas Tab Content -->
+        <div id="formulasTabContent" class="tab-content">
+            <h2 class="text-2xl font-semibold text-center mb-6">Roster Summary Formulas</h2>
+            <ul class="formulas-list">
+                <li>
+                    <p class="formula-title">Day Shifts (D)</p>
+                    <code class="formula-equation">Total count of 'D' shifts worked</code>
+                </li>
+                <li>
+                    <p class="formula-title">Night Shifts (N)</p>
+                    <code class="formula-equation">Total count of 'N' shifts worked</code>
+                </li>
+                <li>
+                    <p class="formula-title">Off Days (O)</p>
+                    <code class="formula-equation">Total count of 'O' shifts</code>
+                </li>
+                <li>
+                    <p class="formula-title">Total Shifts</p>
+                    <code class="formula-equation">Day Shifts (D) + Night Shifts (N)</code>
+                </li>
+                <li>
+                    <p class="formula-title">Normal Time</p>
+                    <code class="formula-equation">Day Shifts (D) + Night Shifts (N)</code>
+                </li>
+                <li>
+                    <p class="formula-title">Normal Hours</p>
+                    <code class="formula-equation">Normal Time * 12 hours</code>
+                </li>
+                <li>
+                    <p class="formula-title">OT1 (Overtime 1 after 208 normal hours)</p>
+                    <code class="formula-equation">max(0, Normal Hours - 208)</code>
+                </li>
+                <li>
+                    <p class="formula-title">Sunday Day</p>
+                    <code class="formula-equation">Total count of 'D' shifts worked on a Sunday</code>
+                </li>
+                <li>
+                    <p class="formula-title">Sunday Night</p>
+                    <code class="formula-equation">Total count of 'N' shifts worked on a Sunday</code>
+                </li>
+                <li>
+                    <p class="formula-title">Sundays Worked</p>
+                    <code class="formula-equation">Sunday Day + Sunday Night</code>
+                </li>
+                <li>
+                    <p class="formula-title">Sunday Hours' Time and a half</p>
+                    <code class="formula-equation">Sundays Worked * 18 hours</code>
+                </li>
+                <li>
+                    <p class="formula-title">Night Shift (Total)</p>
+                    <code class="formula-equation">Night Shifts (N)</code>
+                </li>
+                <li>
+                    <p class="formula-title">Day & Night</p>
+                    <code class="formula-equation">Total count of 'Night to Day' extra pay shifts</code>
+                </li>
+                <li>
+                    <p class="formula-title">C/R (Total no. of shifts worked for Call-out Rate)</p>
+                    <code class="formula-equation">Public Holiday Day Shift + Public Holiday Night Shift + Day Overtime + Night Overtime + Sunday Day + Sunday Night</code>
+                </li>
+                <li>
+                    <p class="formula-title">Overtime 2 (Red)</p>
+                    <code class="formula-equation">Day Overtime + Night Overtime</code>
+                </li>
+                <li>
+                    <p class="formula-title">Leave Counts</p>
+                    <code class="formula-equation">Total count of each specific leave type applied (Annual Leave, Sick Leave, etc.)</code>
+                </li>
+                <li>
+                    <p class="formula-title">Extra Pay Counts</p>
+                    <code class="formula-equation">Total count of each specific extra pay type applied (Day Overtime, Night Overtime, etc.)</code>
+                </li>
+            </ul>
         </div>
     </div>
 
@@ -546,6 +688,12 @@
             const startDateHolidayIndicator = document.getElementById('startDateHolidayIndicator');
             const endDateHolidayIndicator = document.getElementById('endDateHolidayIndicator');
 
+            // Tab buttons and content
+            const rosterTabBtn = document.getElementById('rosterTabBtn');
+            const formulasTabBtn = document.getElementById('formulasTabBtn');
+            const rosterTabContent = document.getElementById('rosterTabContent');
+            const formulasTabContent = document.getElementById('formulasTabContent');
+
 
             // Set min date to 2025-01-01
             const overallMinDate = `2025-01-01`;
@@ -561,6 +709,26 @@
             employeesATextarea.value = '';
             employeesBTextarea.value = '';
             employeesCTextarea.value = '';
+
+            /**
+             * Handles tab switching.
+             * @param {string} tabId The ID of the tab content to show.
+             */
+            function switchTab(tabId) {
+                // Hide all tab content
+                document.querySelectorAll('.tab-content').forEach(content => {
+                    content.classList.remove('active');
+                });
+                // Deactivate all tab buttons
+                document.querySelectorAll('.tab-button').forEach(button => {
+                    button.classList.remove('active');
+                });
+
+                // Show the selected tab content and activate its button
+                document.getElementById(tabId).classList.add('active');
+                document.getElementById(tabId.replace('Content', 'Btn')).classList.add('active');
+            }
+
 
             /**
              * Helper function to parse a YYYY-MM-DD string into a Date object in local time.
@@ -779,7 +947,7 @@
                             'normal time': 0, // New: normal time
                             'normal hours': 0, // New: normal hours
                             'night shift total': 0, // New: night shift total
-                            'day & night': 0, // New: day & night (for Night to Day)
+                            'night to day': 0, // New: night to day (for extra pay)
                             'sunday day': 0, // New: Sunday Day count
                             'sunday night': 0, // New: Sunday Night count
                             'sundays worked': 0, // New: Sundays Worked count
@@ -821,16 +989,13 @@
                             currentEmployeeShiftCounts[employee][baseShiftType]++; // Increment D, N, or O count
                             currentEmployeeShiftCounts[employee]['Total Shifts']++; // Increment total shifts
 
-                            // Specific calculations for normal time, night shift total, day & night
+                            // Specific calculations for normal time, night shift total, etc.
                             if (baseShiftType === 'D' || baseShiftType === 'N') {
                                 currentEmployeeShiftCounts[employee]['normal time']++;
                             }
                             if (baseShiftType === 'N') {
                                 currentEmployeeShiftCounts[employee]['night shift total']++;
                             }
-                            // The 'Day&Night' column in summary is now 'Night to Day' in extra pay
-                            // This means a shift that transitions from Night to Day.
-                            // This is handled by the extra pay type 'night to day' and not a base shift.
 
                             // New: Calculate Sunday Day and Sunday Night
                             if (isSunday) {
@@ -977,7 +1142,7 @@
                     const ot1Hours = normalHours > 208 ? normalHours - 208 : 0; // Calculate OT1 hours
                     const sundaysWorked = counts['sundays worked'] || 0; // Get Sundays Worked count
                     const sundayHoursTimeAndAHalf = sundaysWorked * 18; // Calculate Sunday Hours' Time and a half
-
+                    
                     // Calculate C/R (Total no. of shifts worked)
                     const crTotalShiftsWorked = 
                         (counts['public holiday day shift'] || 0) +
@@ -1485,6 +1650,10 @@
             applyAllLeaveBtn.addEventListener('click', applyAllLeave);
             addExtraPayEntryBtn.addEventListener('click', addExtraPayEntryRow);
             applyAllExtraPayBtn.addEventListener('click', applyAllExtraPay);
+            
+            // Tab button event listeners
+            rosterTabBtn.addEventListener('click', () => switchTab('rosterTabContent'));
+            formulasTabBtn.addEventListener('click', () => switchTab('formulasTabContent'));
 
             // Event listeners to update employee dropdowns when main employee lists change
             employeesATextarea.addEventListener('input', () => {
